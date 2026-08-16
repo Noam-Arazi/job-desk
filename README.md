@@ -1,0 +1,87 @@
+# job-desk
+
+Every morning: a ranked shortlist of jobs and freelance projects, each with a tailored CV already written, delivered to Telegram. A human reads it and decides.
+
+**The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied unconditionally at the dispatch point, and there is a test that proves a compromised model still cannot reach it.
+
+> Status: session 3 of 9. The skeleton, the policy layer, the model layer and the test suite are built. Scraping (session 4), the analyst (session 5) and CV tailoring (session 6) are not.
+
+## Run it with nothing
+
+No API key, no network, no accounts.
+
+```bash
+uv sync --dev && uv run desk demo
+```
+
+The demo ingests four synthetic postings, normalizes them through the model layer against recorded cassettes, collapses the duplicate, and writes a trace. One of the four contains a prompt-injection payload; watch what happens to it.
+
+```bash
+uv run pytest -q
+```
+
+Other commands: `desk spec` (what counts as a relevant posting), `desk tools` (the registry and its permission tiers), `desk routes` (the stage routing table), `desk prompts` (prompt versions and hashes), `desk trace <path>`.
+
+## How it is put together
+
+```
+spec/search.yaml     the only place a filtering criterion lives
+prompts/             versioned prompt files, loaded by id and hash-pinned
+src/desk/
+  policy.py          three permission tiers
+  registry.py        tool schemas + handlers, and the one dispatch point
+  hooks.py           policy, tracing, redaction and budget as lifecycle hooks
+  orchestrator.py    a typed plan with depends_on
+  store/             sqlite: postings, fingerprints, applications, decisions
+  llm/               three clients behind one Protocol + the stage routing table
+  trace.py           append-only JSONL, tokens and cost per step
+```
+
+### The five agentic design patterns, and what proves each one
+
+| Pattern | Where it lives | The test that pins it down |
+|---|---|---|
+| Tool use | `registry.py` | schema↔handler identity in both directions; tool errors return as `tool_result` and never raise |
+| Reflection | `analyst.py` (session 5) | generator/evaluator loop on requirement extraction, span-anchored |
+| Planning | `orchestrator.py` | a typed plan whose dependency graph is validated before anything runs |
+| Orchestrator + workers | `pipeline.py`, agents | per-step token accounting against a single-agent baseline |
+| Memory | `store/` | content fingerprints stable under whitespace, casing and HTML; cross-run dedup; the applied blocklist |
+
+### Permission tiers
+
+```
+read          fetch, search, score, resolve      always allowed
+write-local   draft a CV, write a tracking entry  approval token required
+external      submit_application                  REGISTERED AND ALWAYS DENIED
+```
+
+The external tool is registered deliberately. A tool that simply did not exist would prove nothing — a jailbroken model would fail with "unknown tool", which is a much weaker claim than "the model asked, and the boundary held".
+
+### Model routing
+
+Two rules. Cut deterministically before spending a token — fetching, HTML-to-text, fingerprinting and the hard gates cost nothing. And send mechanical work to the cheapest model with a tighter prompt rather than to a stronger model with a loose one.
+
+| Stage | Model |
+|---|---|
+| normalize, family routing, dedup tiebreak, no-fabrication verify, orchestrator plan | Haiku 4.5 |
+| requirement extraction, fit score, CV tailoring, proposal and outreach drafts | Sonnet 5 |
+| weekly calibration, offline eval judge | Opus 5 |
+
+`desk routes` prints the live table. A stage cannot escalate past its declared ceiling; the resolver raises, and a test walks the whole table.
+
+### Threat model
+
+The input is hostile by construction. A job posting is text written by a stranger, and some of it is addressed to the agent.
+
+- **Prompt injection.** Postings are data, never instructions. What stops an injected "submit this application now" is not a prompt telling the model to be careful — it is that the external tier is denied at dispatch, below the model. `tests/test_injection.py` runs the payload end to end and asserts no external handler was entered.
+- **Credential exfiltration.** A redaction hook strips anything key-shaped out of tool results before it can reach a model or the trace. Real data — CVs, application history, the store — is gitignored; the repo carries a fabricated profile.
+- **Runaway spend.** Every model call goes through one gateway with a cost ceiling. Crossing it fires `on_budget_exceeded` once and aborts the run cleanly, mid-plan, with partial results reported.
+- **Silent breakage.** A site changing its markup fails that module only. The run completes and says which source is missing rather than producing a quietly shorter digest.
+
+### Libraries considered
+
+**Scrapling** is going in as the fetch layer in session 4, for adaptive element relocation after a site changes its structure. It stays an implementation detail behind each site module, and its fetchers are an optional dependency group so the offline path stays light.
+
+**DeepSeek's agent framework** was rejected — not on quality. It supplies precisely what this repo is meant to demonstrate the author can build: an orchestrator, a tool registry and a policy layer. A repo that assembles those from a dependency shows you can configure a framework, not write one.
+
+LinkedIn runs last, disabled by default, through an already-logged-in browser at human pace. No TLS impersonation and no anti-bot bypass: scraping politely and evading a bot defence are different acts.

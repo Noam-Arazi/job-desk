@@ -1,0 +1,27 @@
+# --- real data never enters the repo -----------------------------------
+# The repo ships a fabricated profile and sample postings only.
+/data/
+/runs/
+/cv/
+*.sqlite
+*.sqlite3
+*.db
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# macos
+.DS_Store

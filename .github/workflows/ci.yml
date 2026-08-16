@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --all-extras --dev
+
+      - name: lint
+        run: uv run ruff check .
+
+      - name: tests
+        run: uv run pytest -q
+
+      # The offline reproduction promise: a clean clone runs with no API key.
+      - name: offline demo
+        run: uv run desk demo
+        env:
+          ANTHROPIC_API_KEY: ""

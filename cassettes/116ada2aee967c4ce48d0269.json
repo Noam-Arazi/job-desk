@@ -1,0 +1,12 @@
+{
+  "effort": "low",
+  "external_id": "DR-88120",
+  "model": "claude-haiku-4-5",
+  "stage": "normalize_posting",
+  "text": "{\"company\": \"Bluewick Systems\", \"degree_required\": [], \"language\": \"he\", \"location\": \"חיפה\", \"open_degree_clause\": true, \"title\": \"אנליסט נתונים\", \"work_arrangement\": \"hybrid\", \"years_required\": 2}",
+  "usage": {
+    "cache_read_tokens": 0,
+    "input_tokens": 620,
+    "output_tokens": 95
+  }
+}

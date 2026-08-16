@@ -1,0 +1,12 @@
+{
+  "effort": "low",
+  "external_id": "GF-3391",
+  "model": "claude-haiku-4-5",
+  "stage": "normalize_posting",
+  "text": "{\"company\": \"Cordelia Labs\", \"degree_required\": [\"computer science\", \"software engineering\"], \"language\": \"en\", \"location\": \"Tel Aviv\", \"open_degree_clause\": false, \"title\": \"AI Engineer\", \"work_arrangement\": \"onsite\", \"years_required\": 5}",
+  "usage": {
+    "cache_read_tokens": 0,
+    "input_tokens": 620,
+    "output_tokens": 95
+  }
+}

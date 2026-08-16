@@ -1,0 +1,43 @@
+[project]
+name = "job-desk"
+version = "0.1.0"
+description = "A daily, ranked digest of jobs and freelance projects, each with a tailored CV ready. The system never applies."
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# The API path exists so the repo is not a Claude Code script. Not needed to run the demo.
+api = ["anthropic>=0.69"]
+# Kept optional so the offline replay path stays light — see session 4.
+fetchers = ["scrapling[fetchers]>=0.2"]
+
+[project.scripts]
+desk = "desk.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "hypothesis>=6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/desk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

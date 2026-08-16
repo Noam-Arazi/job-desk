@@ -1,0 +1,218 @@
+# job-desk — search specification
+# Session 1 output. Written from scratch on 2026-08-16.
+# This file is the single source of truth for what counts as a relevant posting.
+# Changing a criterion is an edit here, never a code change.
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# geography
+# No commute ceiling. Region allowlist only; distance is reported per item
+# so the decision stays with the human.
+# ---------------------------------------------------------------------------
+geography:
+  regions:
+    - haifa
+    - north            # Krayot, Akko, Nesher, Tirat Carmel, Yokneam, Karmiel,
+                       # Migdal HaEmek, Nazareth, Afula, Alon Tavor
+    - sharon           # Netanya, Kfar Saba, Raanana, Herzliya, Caesarea, Hadera
+    - center           # Tel Aviv, Ramat Gan, Givatayim, Petah Tikva, Bnei Brak,
+                       # Holon, Rishon LeZion, Rehovot
+  exclude_regions:
+    - south
+    - jerusalem
+  remote:
+    israel_based: true
+    international: false
+
+work_arrangement:       # all accepted; recorded per item, never filtered on
+  - onsite
+  - hybrid
+  - remote
+
+# ---------------------------------------------------------------------------
+# hard gates — deterministic, run before any model call
+# ---------------------------------------------------------------------------
+gates:
+  seniority:
+    mode: block
+    max_required_years: 3          # "3 years" passes, "4+" and "5 years" blocked
+    unstated: pass                 # no stated requirement => not a blocker
+    range_rule: use_lower_bound    # "3-5 years" is read as 3 and passes;
+                                   # switch to use_upper_bound to tighten
+
+  degree:
+    mode: block
+    closed_lists:                  # blocked when the posting demands one of these
+      - computer science           # מדעי המחשב
+      - industrial engineering     # הנדסת תעשייה וניהול
+      - information systems        # מערכות מידע
+      - software engineering       # הנדסת תוכנה
+      - statistics                 # סטטיסטיקה
+      - mathematics                # מתמטיקה
+    open_clause_overrides: true    # an open clause cancels the block
+    open_clause_markers:           # if any of these appear, the list is not closed
+      - "או תואר רלוונטי אחר"
+      - "תואר רלוונטי"
+      - "השכלה רלוונטית"
+      - "or other relevant degree"
+      - "relevant degree"
+    held_degree: "B.A. Government & Strategy, Reichman University"
+
+  freshness:
+    max_age_days: 7
+    first_run_backfill_days: 30    # one-time, to fill the store
+
+  duplicates:
+    mode: collapse                 # same role from several sites or agencies
+                                   # becomes a single item
+  already_applied:
+    mode: suppress                 # never resurface a posting already applied to
+
+# ---------------------------------------------------------------------------
+# role families
+# Each family maps to a CV base (session 2) and carries its own search terms.
+# ---------------------------------------------------------------------------
+families:
+
+  data_analyst:
+    cv_base: data_analyst
+    # Not a BI developer. Power BI and Tableau are coursework; the real
+    # dashboards were built in Monday.com and in code. Kept broad via
+    # the bare term "analyst".
+    terms_he:
+      - אנליסט
+      - אנליסט נתונים
+      - אנליסט דאטה
+      - מנתח נתונים
+      - אנליסט BI
+    terms_en:
+      - analyst
+      - data analyst
+      - BI analyst
+      - business intelligence
+
+  ai_builder:
+    cv_base: ai_builder
+    # "מהנדס" titles almost always carry a closed degree list — they are
+    # kept in, and the degree gate is what removes them.
+    # "Copilot" deliberately excluded: no hands-on experience with it.
+    terms_he:
+      - מהנדס AI
+      - מומחה AI
+      - מיישם AI
+      - מפתח AI
+      - בינה מלאכותית
+      - סוכני AI
+      - אוטומציה חכמה
+      - מומחה אוטומציה
+      - הטמעת AI
+      - RAG
+    terms_en:
+      - AI engineer
+      - AI builder
+      - AI developer
+      - LLM engineer
+      - GenAI
+      - agentic
+      - prompt engineer
+      - AI automation
+      - AI solutions
+      - AI adoption
+      - automation specialist
+      - RAG
+
+  product_project:
+    cv_base: product_project
+    # Systems analysis and systems implementation are out — no experience
+    # and no knowledge in that area.
+    terms_he:
+      - מנהל פרויקט
+      - מנהל מוצר
+      - מנהל פרויקטים טכנולוגיים
+    terms_en:
+      - product manager
+      - project manager
+      - technical program manager
+      - PMO
+
+  strategy_public:
+    cv_base: strategy_public
+    terms_he:
+      - יועץ
+      - אסטרטגי
+      - ייעוץ אסטרטגי
+      - טרנספורמציה דיגיטלית
+      - שלטון מקומי
+      - מערך הדיגיטל
+    terms_en:
+      - consultant
+      - strategic
+      - strategy
+      - digital transformation
+      - public sector
+
+# ---------------------------------------------------------------------------
+# sites — built one at a time, in this order
+# ---------------------------------------------------------------------------
+sites:
+
+  - id: alljobs
+    order: 1
+    enabled: true
+    fetch: scrapling_http
+    rate_limit_rps: 0.5
+    notes: largest Israeli inventory, most tractable to parse
+
+  - id: drushim
+    order: 2
+    enabled: true
+    fetch: scrapling_http
+    rate_limit_rps: 0.5
+    notes: overlaps AllJobs; the resolver collapses the duplicates
+
+  - id: gotfriends
+    order: 3
+    enabled: true
+    fetch: scrapling_http
+    rate_limit_rps: 0.5
+    categories: [ai-engineer, llm-engineer, data-analyst, bi-developer,
+                 data-engineer, product-analyst]
+    notes: small inventory, heavily center-weighted, but high AI relevance
+
+  - id: linkedin
+    order: 4
+    enabled: false                 # enabled last, deliberately
+    fetch: attached_browser        # the already-logged-in Chrome session
+    rate_limit_rps: 0.1            # human pace
+    stealth: false                 # anti-bot bypass is NOT used here
+    notes: >
+      Scraped through the human's own logged-in browser at human pace.
+      No TLS impersonation, no Cloudflare bypass. This module is isolated
+      and can be switched off without affecting the rest of the run.
+
+  - id: xplace
+    order: 5
+    enabled: true
+    fetch: scrapling_http
+    rate_limit_rps: 0.5
+    pipeline: freelance            # separate flow — scope and budget, not
+                                   # seniority and degree
+
+# ---------------------------------------------------------------------------
+# daily digest
+# ---------------------------------------------------------------------------
+digest:
+  max_items: 5
+  min_score: 0.6                   # an empty day is a valid answer
+  order_by: score_desc
+  include_per_item:
+    - score
+    - one_line_reason
+    - gate_results
+    - region_and_distance
+    - recommended_channel          # button | person | skip
+    - tailored_cv_path
+  schedule:
+    cron: "0 8 * * *"
+    timeout_seconds: 900           # explicit — Power Nap hangs untimed jobs
