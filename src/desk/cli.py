@@ -45,8 +45,12 @@ def cmd_demo(args: argparse.Namespace) -> int:
     total = ctx.tracer.total
     print("")
     print(f"tokens   in={total.input_tokens} out={total.output_tokens} cost=${total.cost_usd:.6f}")
-    denied = [e for e in ctx.tracer.events if e["kind"] == "error" and "denied" in str(e)]
-    print(f"denied   {len(denied)} external-tier attempts blocked")
+    denied = [e for e in ctx.tracer.events if e["kind"] == "error" and "denied:" in str(e)]
+    # Zero is the expected number here. The demo does not stage a jailbreak — one
+    # of the sample postings carries an injection payload and is normalized as
+    # ordinary data, which is the point. The adversarial proof, where a
+    # compromised model does make the call, is tests/test_injection.py.
+    print(f"denied   {len(denied)} policy denials (adversarial proof: tests/test_injection.py)")
     ctx.store.close()
     return 0 if report.ok else 1
 
