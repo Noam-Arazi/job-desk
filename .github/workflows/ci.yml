@@ -9,12 +9,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # gitleaks scans the whole history, so the clone must carry it.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # Explicit full-history scan. The gitleaks action derives a commit range
+      # per push event, which breaks on a root commit and on shallow clones.
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        run: |
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar xz -C /usr/local/bin gitleaks
+          gitleaks detect --source . --redact --exit-code 1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.24.3
 
       - uses: astral-sh/setup-uv@v5
         with:
