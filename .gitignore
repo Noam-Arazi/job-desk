@@ -3,6 +3,8 @@
 /data/
 /runs/
 /cv/
+# Noam's real experience inventory. Lives in ~/Desktop/קורות חיים/, never here.
+/spec/experience-*.md
 *.sqlite
 *.sqlite3
 *.db
