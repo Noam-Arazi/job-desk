@@ -12,7 +12,10 @@ dependencies = [
 # The API path exists so the repo is not a Claude Code script. Not needed to run the demo.
 api = ["anthropic>=0.69"]
 # Kept optional so the offline replay path stays light — see session 4.
-fetchers = ["scrapling[fetchers]>=0.2"]
+# Two tiers on purpose. `fetch` is HTTP plus adaptive parsing and is small.
+# `browser` adds Playwright, and only the attached-browser site needs it.
+fetch = ["scrapling>=0.4"]
+browser = ["scrapling[fetchers]>=0.4"]
 
 [project.scripts]
 desk = "desk.cli:main"
@@ -22,6 +25,9 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "hypothesis>=6",
+    # The parser tests run against saved fixtures, so the parsing half is
+    # always installed for development. Playwright still is not.
+    "scrapling>=0.4",
 ]
 
 [build-system]

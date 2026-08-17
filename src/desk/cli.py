@@ -1,6 +1,7 @@
 """desk — the command line.
 
 desk demo      run the offline skeleton end to end (no key, no network)
+desk fetch     scrape one site into the store; a dry run unless --write
 desk spec      show what the search specification currently says
 desk tools     show the registered tools and their permission tiers
 desk routes    show the stage routing table
@@ -15,12 +16,13 @@ import sys
 from pathlib import Path
 
 from . import prompts
-from .config import load_spec
+from .config import load_spec, paths
 from .llm.routing import MODELS, TABLE
 from .orchestrator import Status, run
 from .pipeline import AGENTS, demo_plan
 from .registry import registry
 from .runner import ENGINES, build_context, settings_from_env
+from .store import Store
 
 
 def cmd_demo(args: argparse.Namespace) -> int:
@@ -53,6 +55,77 @@ def cmd_demo(args: argparse.Namespace) -> int:
     print(f"denied   {len(denied)} policy denials (adversarial proof: tests/test_injection.py)")
     ctx.store.close()
     return 0 if report.ok else 1
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    """Fetching spends no tokens. It is the cut that happens before the models.
+
+    A dry run by default: it fetches, parses and reports, and writes nothing.
+    Storing is an explicit `--write`, so the first look at a new site or a
+    changed layout can never quietly fill the store with garbage.
+    """
+    from datetime import datetime
+
+    from .sites import MODULES, HttpFetcher, Throttle, ThrottledFetcher, rate_limit
+
+    spec = load_spec()
+    if args.site not in MODULES:
+        print(f"unknown site {args.site!r}; have {', '.join(sorted(MODULES))}", file=sys.stderr)
+        return 1
+
+    throttle = Throttle(rate_limit(spec, args.site))
+    fetcher = ThrottledFetcher(HttpFetcher(), throttle)
+    now = datetime.now()
+
+    result = MODULES[args.site](
+        fetcher,
+        spec=spec,
+        now=now,
+        max_pages=args.pages,
+        max_age_days=args.max_age,
+        terms=args.term or None,
+        regions=args.region or None,
+    )
+
+    print(f"site     {result.site}   {'WRITE' if args.write else 'dry run'}")
+    print(f"pages    {result.pages_fetched} fetched at {throttle.interval:.1f}s apart")
+    print(f"kept     {len(result.postings)} postings")
+    for reason, count in sorted(result.skipped.items()):
+        print(f"dropped  {count:>4}  {reason}")
+    for error in result.errors:
+        print(f"error    {error}")
+    if result.stopped_because:
+        print(f"stopped  {result.stopped_because}")
+
+    undated = [p for p in result.postings if not p.posted_at]
+    if undated:
+        print(f"undated  {len(undated)} postings whose date did not parse")
+
+    print("")
+    for posting in result.postings[: args.show]:
+        stamp = posting.posted_at[:16] or posting.posted_raw or "?"
+        terms = ", ".join(result.matched_terms.get(posting.external_id, []))
+        print(f"  {stamp}  {posting.location[:14]:<14}  {posting.title[:48]}")
+        if terms:
+            print(f"  {'':16}  found by: {terms[:70]}")
+
+    if not args.write:
+        print("")
+        print("nothing stored. re-run with --write to store")
+        return 0 if result.ok else 1
+
+    store = Store(paths().ensure().db)
+    stored = new = 0
+    for posting in result.postings:
+        stored += 1
+        if store.upsert_posting(posting.to_posting(), now=now.isoformat(timespec="seconds")):
+            new += 1
+    counts = store.counts()
+    store.close()
+    print("")
+    print(f"stored   {stored} rows, {new} roles new to the store")
+    print(f"store    {counts['postings']} postings, {counts['fingerprints']} distinct roles")
+    return 0 if result.ok else 1
 
 
 def cmd_spec(args: argparse.Namespace) -> int:
@@ -122,6 +195,16 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--wall-clock", action="store_true", help="disable the deterministic clock")
     demo.add_argument("--root", default=None, help="where data/ and runs/ live")
     demo.set_defaults(func=cmd_demo)
+
+    fetch = sub.add_parser("fetch", help="scrape one site into the store")
+    fetch.add_argument("--site", default="alljobs")
+    fetch.add_argument("--pages", type=int, default=6, help="page ceiling per query")
+    fetch.add_argument("--term", action="append", help="search term; default is the whole spec")
+    fetch.add_argument("--region", type=int, action="append", help="board region code")
+    fetch.add_argument("--max-age", type=int, default=None, help="override the freshness window")
+    fetch.add_argument("--show", type=int, default=12, help="how many postings to print")
+    fetch.add_argument("--write", action="store_true", help="store instead of dry-running")
+    fetch.set_defaults(func=cmd_fetch)
 
     sub.add_parser("spec", help="show the search specification").set_defaults(func=cmd_spec)
     sub.add_parser("tools", help="show registered tools and tiers").set_defaults(func=cmd_tools)
