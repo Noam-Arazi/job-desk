@@ -57,7 +57,8 @@ from typing import Any
 from urllib.parse import quote
 
 from . import http
-from .base import Fetcher, RawPosting, SiteResult
+from .base import Fetcher, RawPosting, SiteResult, crawl_terms, search_terms
+from .dates import parse_date
 
 SITE = "alljobs"
 BASE_URL = "https://www.alljobs.co.il"
@@ -118,66 +119,6 @@ FIELDS: dict[str, tuple[str, ...]] = {
 _LABEL = re.compile(r"^\s*(מיקום המשרה|סוג משרה)\s*:\s*")
 _JOB_ID = re.compile(r"JobID=(\d+)")
 _CONTAINER_ID = re.compile(r"job-box-container(\d+)")
-
-
-# --------------------------------------------------------------------------
-# dates
-# --------------------------------------------------------------------------
-
-_REL = re.compile(r"לפני\s+(\d+)?\s*(דקה|דקות|שעה|שעות|יום|ימים|שבוע|שבועות)")
-_BARE_DAYS = re.compile(r"^(\d+)\s+ימים")
-_ABSOLUTE = re.compile(r"(\d{1,2})[./](\d{1,2})[./](\d{2,4})")
-
-_UNITS = {
-    "דקה": "minutes",
-    "דקות": "minutes",
-    "שעה": "hours",
-    "שעות": "hours",
-    "יום": "days",
-    "ימים": "days",
-    "שבוע": "weeks",
-    "שבועות": "weeks",
-}
-
-
-def parse_date(raw: str, *, now: datetime) -> tuple[str, bool]:
-    """Turn the board's wording into ISO 8601.
-
-    Returns the timestamp and whether it parsed. An unparsed date is not
-    guessed at and not dropped — it travels as an empty string with the
-    original wording preserved, and the freshness gate decides in session 5.
-    A scraper that invents a date it could not read is worse than one that
-    admits it does not know.
-    """
-    text = (raw or "").strip()
-    if not text:
-        return "", False
-
-    if "אתמול" in text:
-        return (now - timedelta(days=1)).isoformat(timespec="seconds"), True
-    if "היום" in text:
-        return now.isoformat(timespec="seconds"), True
-
-    match = _REL.search(text)
-    if match:
-        amount = int(match.group(1)) if match.group(1) else 1
-        unit = _UNITS[match.group(2)]
-        return (now - timedelta(**{unit: amount})).isoformat(timespec="seconds"), True
-
-    bare = _BARE_DAYS.match(text)
-    if bare:
-        return (now - timedelta(days=int(bare.group(1)))).isoformat(timespec="seconds"), True
-
-    absolute = _ABSOLUTE.search(text)
-    if absolute:
-        day, month, year = (int(g) for g in absolute.groups())
-        year += 2000 if year < 100 else 0
-        try:
-            return datetime(year, month, day).isoformat(timespec="seconds"), True
-        except ValueError:
-            return "", False
-
-    return "", False
 
 
 # --------------------------------------------------------------------------
@@ -283,21 +224,6 @@ def _body(card: Any) -> str:
 # --------------------------------------------------------------------------
 
 
-def search_terms(spec: dict[str, Any]) -> list[str]:
-    """Every term the spec declares, in family order, without repeats.
-
-    A term that finds nothing is not pruned here. The spec says the width was
-    raised deliberately and comes down on measurement in session 5, not on a
-    hunch in the fetching layer.
-    """
-    terms: list[str] = []
-    for family in spec.get("families", {}).values():
-        for term in [*family.get("terms_he", []), *family.get("terms_en", [])]:
-            if term not in terms:
-                terms.append(term)
-    return terms
-
-
 def regions_for(spec: dict[str, Any]) -> list[int]:
     """The board's codes for the regions the spec accepts. Order is stable."""
     geography = spec["geography"]
@@ -334,55 +260,17 @@ def crawl(
     """
     if max_age_days is None:
         max_age_days = int(spec["gates"]["freshness"]["max_age_days"])
-    cutoff = (now - timedelta(days=max_age_days)).isoformat(timespec="seconds")
 
-    queries = terms if terms is not None else search_terms(spec)
-    region_codes = regions if regions is not None else [""]
-
-    result = SiteResult(site=SITE)
-    found: dict[str, RawPosting] = {}
-    matched: dict[str, list[str]] = {}
-    skipped: dict[str, int] = {}
-    stops: list[str] = []
-
-    for term in queries:
-        for region in region_codes:
-            label = f"{term!r}" + (f" region {region}" if region != "" else "")
-            for page in range(1, max_pages + 1):
-                url = SEARCH.format(page=page, term=quote(term), region=region)
-                try:
-                    html = fetcher.get(url)
-                    parsed = parse(html, now=now)
-                except Exception as exc:  # this page's problem, not the run's
-                    result.errors.append(f"{label} page {page}: {exc}")
-                    break
-
-                result.pages_fetched += 1
-                for reason, count in parsed["skipped"].items():
-                    skipped[reason] = skipped.get(reason, 0) + count
-
-                fresh = 0
-                for posting in parsed["postings"]:
-                    if posting.posted_at and posting.posted_at < cutoff:
-                        continue
-                    fresh += 1
-                    if posting.external_id not in found:
-                        found[posting.external_id] = posting
-                        matched[posting.external_id] = []
-                    if term not in matched[posting.external_id]:
-                        matched[posting.external_id].append(term)
-
-                if not parsed["postings"]:
-                    stops.append(f"{label}: empty page {page}")
-                    break
-                if fresh == 0:
-                    stops.append(f"{label}: page {page} was entirely older than the window")
-                    break
-            else:
-                stops.append(f"{label}: hit the {max_pages}-page ceiling")
-
-    result.postings = list(found.values())
-    result.matched_terms = matched
-    result.stopped_because = " · ".join(stops)
-    result.skipped = skipped
-    return result
+    return crawl_terms(
+        site=SITE,
+        fetcher=fetcher,
+        url_for=lambda term, page, region: SEARCH.format(
+            page=page, term=quote(term), region=region
+        ),
+        parse_page=lambda html: parse(html, now=now),
+        terms=terms if terms is not None else search_terms(spec),
+        # The ordinary path sends no region at all; a targeted run can pass codes.
+        variants=list(regions) if regions else [""],
+        cutoff=(now - timedelta(days=max_age_days)).isoformat(timespec="seconds"),
+        max_pages=max_pages,
+    )

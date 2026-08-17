@@ -25,7 +25,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..store import Posting
 
@@ -49,6 +49,9 @@ class RawPosting:
     posted_at: str = ""  # ISO 8601, empty when the board's wording did not parse
     posted_raw: str = ""
     work_arrangement: str = ""
+    # Some boards state the experience they want as its own field. Where they
+    # do, the seniority gate reads it instead of inferring it from prose.
+    stated_experience: str = ""
 
     def to_posting(self) -> Posting:
         return Posting(
@@ -102,6 +105,98 @@ class Fetcher(Protocol):
     """The one call a site module is allowed to make against the network."""
 
     def get(self, url: str) -> str: ...
+
+
+def search_terms(spec: dict[str, Any]) -> list[str]:
+    """Every term the spec declares, in family order, without repeats.
+
+    Site-agnostic on purpose: the terms are the spec's, not a board's, and two
+    modules reading two copies of this would drift.
+
+    A term that finds nothing is not pruned here. The spec says the width was
+    raised deliberately and comes down on measurement in session 5, not on a
+    hunch in the fetching layer.
+    """
+    terms: list[str] = []
+    for family in spec.get("families", {}).values():
+        for term in [*family.get("terms_he", []), *family.get("terms_en", [])]:
+            if term not in terms:
+                terms.append(term)
+    return terms
+
+
+def crawl_terms(
+    *,
+    site: str,
+    fetcher: Fetcher,
+    url_for: Callable[[str, int, Any], str],
+    parse_page: Callable[[str], dict[str, Any]],
+    terms: list[str],
+    variants: list[Any],
+    cutoff: str,
+    max_pages: int,
+) -> SiteResult:
+    """Search each term until it stops yielding anything inside the window.
+
+    Shared by every site, because the awkward parts are the same everywhere and
+    are the parts worth getting right once:
+
+    Boards do not order pages strictly by date and consecutive pages repeat
+    listings, so the stop condition cannot be the first old item. It is a page
+    that contributed nothing fresh at all.
+
+    A page that raises is recorded and that term moves on. One broken query
+    never ends the crawl, and the result still carries what was collected.
+
+    The same posting is reached by several terms. That is not waste — the terms
+    that found it are recorded as a prior for routing it to a CV family later —
+    and it is still kept once.
+    """
+    result = SiteResult(site=site)
+    found: dict[str, RawPosting] = {}
+    matched: dict[str, list[str]] = {}
+    skipped: dict[str, int] = {}
+    stops: list[str] = []
+
+    for term in terms:
+        for variant in variants:
+            label = f"{term!r}" + (f" variant {variant}" if variant not in ("", None) else "")
+            for page in range(1, max_pages + 1):
+                try:
+                    parsed = parse_page(fetcher.get(url_for(term, page, variant)))
+                except Exception as exc:  # this page's problem, not the run's
+                    result.errors.append(f"{label} page {page}: {exc}")
+                    break
+
+                result.pages_fetched += 1
+                for reason, count in parsed["skipped"].items():
+                    skipped[reason] = skipped.get(reason, 0) + count
+
+                fresh = 0
+                for posting in parsed["postings"]:
+                    if posting.posted_at and posting.posted_at < cutoff:
+                        continue
+                    fresh += 1
+                    if posting.external_id not in found:
+                        found[posting.external_id] = posting
+                        matched[posting.external_id] = []
+                    if term not in matched[posting.external_id]:
+                        matched[posting.external_id].append(term)
+
+                if not parsed["postings"]:
+                    stops.append(f"{label}: empty page {page}")
+                    break
+                if fresh == 0:
+                    stops.append(f"{label}: page {page} was entirely older than the window")
+                    break
+            else:
+                stops.append(f"{label}: hit the {max_pages}-page ceiling")
+
+    result.postings = list(found.values())
+    result.matched_terms = matched
+    result.stopped_because = " · ".join(stops)
+    result.skipped = skipped
+    return result
 
 
 class Throttle:

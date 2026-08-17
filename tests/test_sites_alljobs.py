@@ -16,6 +16,7 @@ import pytest
 from desk.config import SAMPLES_DIR, load_spec
 from desk.sites import alljobs
 from desk.sites.base import Throttle, ThrottledFetcher
+from desk.sites.dates import parse_date
 from desk.sites.http import FetchError, FixtureFetcher
 
 NOW = datetime(2026, 8, 17, 12, 0, 0)
@@ -122,7 +123,7 @@ def test_a_promoted_listing_parses_like_an_ordinary_one(page: str) -> None:
     ],
 )
 def test_the_boards_wording_parses(raw: str, expected: datetime) -> None:
-    stamp, ok = alljobs.parse_date(raw, now=NOW)
+    stamp, ok = parse_date(raw, now=NOW)
     assert ok
     assert stamp == expected.isoformat(timespec="seconds")
 
@@ -130,7 +131,7 @@ def test_the_boards_wording_parses(raw: str, expected: datetime) -> None:
 @pytest.mark.parametrize("raw", ["", "בקרוב", "לפני זמן מה", "32/13/2026"])
 def test_an_unreadable_date_is_admitted_not_invented(raw: str) -> None:
     """A guessed timestamp would silently pass or fail the freshness gate."""
-    stamp, ok = alljobs.parse_date(raw, now=NOW)
+    stamp, ok = parse_date(raw, now=NOW)
     assert not ok
     assert stamp == ""
 
