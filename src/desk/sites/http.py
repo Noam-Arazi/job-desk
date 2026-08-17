@@ -77,6 +77,9 @@ class FixtureFetcher:
         self.requested.append(url)
         for key, page in self.pages.items():
             if key in url:
-                path = Path(page)
-                return path.read_text(encoding="utf-8") if path.exists() else str(page)
+                # Typed, not sniffed. Asking whether a whole HTML document
+                # "exists" as a path returns False on macOS and raises
+                # ENAMETOOLONG on Linux, so sniffing passed here and failed
+                # in CI.
+                return page.read_text(encoding="utf-8") if isinstance(page, Path) else str(page)
         raise FetchError(f"no fixture for {url}")

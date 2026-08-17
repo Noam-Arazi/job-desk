@@ -268,9 +268,26 @@ def test_the_crawl_stops_when_a_page_is_entirely_stale(page: str) -> None:
         fetcher, spec=load_spec(), now=NOW, terms=["בדיקה"], regions=[1], max_pages=6
     )
 
+    # Assert the reason, not only the empty list. An empty result is also what
+    # a failed fetch produces, and that is exactly how this test passed on
+    # macOS while the fetch was raising on Linux.
+    assert result.errors == []
     assert result.postings == []
     assert "older than the window" in result.stopped_because
     assert result.pages_fetched == 1  # it did not keep paging into stale ground
+
+
+def test_the_fixture_fetcher_serves_a_document_without_touching_the_disk() -> None:
+    """A fixture value is either a path or a document, decided by its type.
+
+    Deciding by asking whether the value exists as a path is what broke: a
+    whole HTML document answers False on macOS and raises ENAMETOOLONG on
+    Linux, so the sniffing version passed locally and failed in CI.
+    """
+    document = "<html>" + ("x" * 5000) + "</html>"
+    fetcher = FixtureFetcher({"any": document})
+
+    assert fetcher.get("https://example.test/any") == document
 
 
 class BrokenFetcher:
