@@ -1,0 +1,244 @@
+# job-desk — CV change contract
+# Session 2 output. Written 2026-08-17.
+# This file is the single source of truth for what the tailoring agent may
+# change in a CV base, and what it may never touch.
+#
+# The six bases are already approved CVs. Tailoring is NOT rewriting: it is
+# ATS keyword alignment plus a response to the specific requirements in one
+# posting. Everything the posting does not ask about stays byte-identical.
+#
+# Every `forbidden` rule below becomes an automated test in session 6.
+# Changing a rule is an edit here, never a code change.
+
+version: 1
+
+# ---------------------------------------------------------------------------
+# inputs
+# ---------------------------------------------------------------------------
+inputs:
+
+  bases_dir: "~/Desktop/קורות חיים/בסיסים/"
+  # Read from disk on every run. Noam edits the bases by hand in Word between
+  # rounds; any diff from a cached copy is his deliberate edit, never a bug.
+  reread_before_each_run: true
+
+  inventory: "~/Desktop/קורות חיים/experience-2026.md"
+  # The experience inventory. Deliberately OUTSIDE the repo — it carries
+  # family and client detail and the repo goes public in session 9.
+  # gitignore blocks /spec/experience-*.md. Never copied into the repo,
+  # never quoted verbatim into a trace, never sent anywhere but the model
+  # call that needs it.
+  in_repo: false
+
+  base_selection:
+    by: family                 # spec/search.yaml families map 1:1 to a base
+    language:
+      default: he
+      use_en_when:             # inherited from קורות חיים/CLAUDE.md
+        - posting_is_english
+        - international_product_company
+    # ai_builder is English-only, strategy_public is Hebrew-only. Six bases,
+    # not eight — Noam's ruling, session 2.
+
+# ---------------------------------------------------------------------------
+# anchors — the role itself
+# A tailored CV that drops one of these is worse than no tailoring at all:
+# an outside reader stops understanding what Noam actually did.
+# Wording inside an anchor may be ATS-swapped; the claim must survive intact.
+# ---------------------------------------------------------------------------
+anchors:
+
+  - id: growth_data_layer
+    employer: growth_directorate
+    position: first_bullet
+    claim: "managed the directorate's data layer / information system"
+    he: "ניהול מערכת המידע של מנהלת הצמיחה"
+    en: "Managed the directorate's data infrastructure"
+
+  - id: growth_analyst_team
+    employer: growth_directorate
+    position: any_bullet
+    claim: "led a team of analysts"
+    he: "ניהול צוות אנליסטים"
+    en: "Led a team of analysts"
+
+  - id: fischer_ai_solutions
+    employer: fischer_technologies
+    position: first_bullet
+    claim: "built AI solutions end to end for clients"
+    he: "פיתוח פתרונות AI למגזר הציבורי"
+    en: "Build AI solutions and agents for public-sector clients end to end"
+
+# ---------------------------------------------------------------------------
+# allowed operations
+# ---------------------------------------------------------------------------
+allowed:
+
+  - id: swap_terminology
+    what: >
+      Replace a term in the base with the posting's exact phrasing when the
+      two mean the same thing. This is the core of the whole contract — it is
+      what an applicant tracking system actually matches on.
+    example: "agent development -> agentic orchestration, when the posting says so"
+    requires: [evidence, scope_unchanged]
+
+  - id: add_term_to_existing_line
+    what: >
+      Add a term the posting demands into an existing skills line or an
+      existing experience line.
+    requires: [evidence]
+    never: creates_a_new_line
+
+  - id: reorder_skill_categories
+    what: "Order the four skills categories by relevance to the posting."
+
+  - id: reorder_lines_within_section
+    what: "Reorder bullets inside one employer. Anchors keep their position."
+
+  - id: drop_secondary_bullet
+    what: "Remove a bullet irrelevant to the posting."
+    only_when: length_pressure      # one-page control, not a stylistic choice
+    never: an_anchor
+
+  - id: drop_skill_item
+    what: "Remove a skills-line item irrelevant to the posting."
+
+# ---------------------------------------------------------------------------
+# forbidden — each one is a test in session 6
+# ---------------------------------------------------------------------------
+forbidden:
+
+  - id: edit_summary
+    rule: >
+      The summary is LOCKED. It is byte-identical across every application.
+      Keywords land in the skills line, never in the summary.
+    why: >
+      The summary states what Noam actually managed. A summary rewritten per
+      posting becomes aspirational positioning, which is what recruiters
+      discount first.
+
+  - id: add_new_bullet
+    rule: "No new bullet, ever. Noam deletes lines; he does not add them."
+
+  - id: introduce_number
+    rule: >
+      No figures. Not counts, not percentages, not sample sizes.
+    why: "A recruiter scans concepts, not numbers. A figure occupies keyword space."
+
+  - id: exceed_one_page
+    rule: "The output stays one page."
+
+  - id: drop_or_weaken_anchor
+    rule: "Every anchor above survives, with its claim intact."
+
+  - id: claim_without_evidence
+    rule: >
+      Every word in the output traces to the base or to the inventory.
+      Nothing is invented, inferred, or generalized from the posting.
+
+  - id: fischer_adoption_claim
+    rule: >
+      No adoption, deployment or production claim on Fischer Technologies
+      work. None of the four things built there is in use today, each for a
+      business reason unrelated to execution quality.
+    blocked_phrases:
+      - "deployed into real use"
+      - "in production"
+      - "adoption by the client"
+      - "from requirement to production use"
+      - "עד המסירה וההטמעה"
+    allowed_for: growth_directorate   # there the systems are in daily use
+
+  - id: attribute_make_to_fischer
+    rule: >
+      Make belongs to the Growth Directorate. Fischer worked against
+      Monday.com and Firebase. Make in an unattributed skills line is fine.
+
+  - id: vertex_on_fischer
+    rule: >
+      The Fischer stack is Claude Code and Firebase, not Vertex AI. Vertex
+      stays in the cloud skills line, backed by the parking agent from studies.
+
+  - id: write_ai_assisted
+    rule: >
+      Never write "AI-assisted" or any equivalent.
+    why: >
+      To a developer it reads as "I did not write this", not as tool fluency.
+      How the code was written is an excellent interview answer and a bad
+      line in a document.
+
+  - id: touch_identity_block
+    rule: >
+      Contact line, employers, titles, dates, education and military service
+      are structural. They are never tailored.
+
+# ---------------------------------------------------------------------------
+# evidence — what replaces a numeric change budget
+# There is deliberately NO cap on the number of changed lines. Noam's call:
+# a line count is the wrong constraint, since one posting may legitimately
+# touch more lines than another. What bounds the agent is that every single
+# change must carry a source.
+# ---------------------------------------------------------------------------
+evidence:
+
+  sources: [base, inventory]
+  required_for: [swap_terminology, add_term_to_existing_line]
+
+  record_per_change:
+    - op                     # which allowed operation
+    - section
+    - before
+    - after
+    - source                 # base | inventory
+    - source_line            # where it came from
+
+  unsourced_change: reject   # the run fails; it does not silently drop the change
+
+  scope_unchanged:
+    rule: >
+      A swap may not enlarge the claim. Same fact, different vocabulary.
+    blocked_escalations:
+      - built -> deployed
+      - built -> shipped to production
+      - contributed -> led
+      - co-developed -> developed
+      - pilot -> production
+      - assisted -> owned
+      - designed -> owned end to end
+
+# ---------------------------------------------------------------------------
+# missing requirement
+# The posting demands a term Noam does not have in the base.
+# ---------------------------------------------------------------------------
+missing_requirement:
+
+  in_inventory: add          # the inventory covers it -> it may enter a line,
+                             # with its source recorded
+  not_in_inventory: report   # it never enters the CV. The gap is surfaced in
+                             # the digest so the human decides whether to
+                             # apply anyway
+  never: fabricate
+
+# ---------------------------------------------------------------------------
+# length
+# ---------------------------------------------------------------------------
+length:
+  target: one_page
+  estimator: chars_per_line   # no Word and no LibreOffice on this machine
+  chars_per_line: 108
+  authority: human            # the page check is always Noam's, in Word
+  on_overflow: drop_secondary_bullet
+
+# ---------------------------------------------------------------------------
+# human in the loop
+# ---------------------------------------------------------------------------
+review:
+  digest_shows:
+    - changed_lines_diff      # before / after, per change
+    - evidence_per_change
+    - missing_requirements    # what the posting wanted and the CV does not claim
+  auto_send: false            # the system never applies on Noam's behalf
+  output:
+    dir: "~/Desktop/קורות חיים/<posting folder>/"
+    filename: "נעם_ארזי_קורות_חיים.docx"   # the role name never enters the filename
+    format: docx              # Word only, never PDF — Noam edits after
