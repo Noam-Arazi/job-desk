@@ -574,7 +574,7 @@ docx = [
     { name = "python-docx" },
 ]
 fetch = [
-    { name = "scrapling" },
+    { name = "scrapling", extra = ["fetchers"] },
 ]
 
 [package.dev-dependencies]
@@ -592,8 +592,8 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "python-docx", marker = "extra == 'docx'", specifier = ">=1.1" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "scrapling", marker = "extra == 'fetch'", specifier = ">=0.4" },
     { name = "scrapling", extras = ["fetchers"], marker = "extra == 'browser'", specifier = ">=0.4" },
+    { name = "scrapling", extras = ["fetchers"], marker = "extra == 'fetch'", specifier = ">=0.4" },
 ]
 provides-extras = ["api", "fetch", "browser", "docx"]
 

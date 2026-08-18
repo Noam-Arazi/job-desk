@@ -21,6 +21,21 @@ class ClaudeCodeError(RuntimeError):
     pass
 
 
+def _reason(stdout: str) -> str:
+    """The CLI's own explanation, when it wrote one as JSON on a failing exit."""
+    try:
+        payload = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        return stdout[:400].strip()
+    if not isinstance(payload, dict):
+        return stdout[:400].strip()
+    for key in ("result", "error", "message"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value[:400]
+    return ""
+
+
 @dataclass
 class ClaudeCodeClient:
     binary: str = "claude"
@@ -54,7 +69,14 @@ class ClaudeCodeClient:
             raise ClaudeCodeError(f"{self.binary} timed out after {self.timeout_seconds}s") from exc
 
         if proc.returncode != 0:
-            raise ClaudeCodeError(f"{self.binary} exited {proc.returncode}: {proc.stderr[:400]}")
+            # The CLI reports why it failed on stdout, as JSON, and leaves stderr
+            # empty. Reading only stderr produced "claude exited 1: " — an error
+            # that tells the reader nothing at the moment they most need to know
+            # whether the run died on their credentials, their quota or a bug.
+            raise ClaudeCodeError(
+                f"{self.binary} exited {proc.returncode}: "
+                f"{_reason(proc.stdout) or proc.stderr[:400] or 'no output'}"
+            )
 
         try:
             payload = json.loads(proc.stdout)

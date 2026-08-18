@@ -98,3 +98,18 @@ def test_every_call_lands_in_the_trace_with_its_own_cost():
     assert len(spans) == 1
     assert spans[0]["model"] == "claude-sonnet-5"
     assert spans[0]["usage"]["cost_usd"] == 0.0001
+
+
+def test_a_failing_cli_reports_its_own_reason_and_not_an_empty_string() -> None:
+    """The CLI writes why it failed to stdout as JSON and leaves stderr empty.
+
+    Reading only stderr produced "claude exited 1: ", which is the least useful
+    possible message at the moment the reader most needs to know whether the run
+    died on credentials, on quota, or on a bug.
+    """
+    from desk.llm.claude_code import _reason
+
+    payload = '{"is_error":true,"result":"Failed to authenticate: OAuth session expired"}'
+    assert _reason(payload) == "Failed to authenticate: OAuth session expired"
+    assert _reason("plain text failure") == "plain text failure"
+    assert _reason("{}") == ""
