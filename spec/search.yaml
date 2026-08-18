@@ -339,7 +339,13 @@ families:
     cv_base: strategy_public
     terms_he:
       - יועץ
+      # Inflections are listed, not inferred. The family matcher reads the term
+      # as the board wrote it and never guesses at a form it was not given —
+      # the same rule the city lists follow. אסטרטגי alone does not match
+      # אסטרטגיה, so both are here. 2026-08-18.
       - אסטרטגי
+      - אסטרטגיה
+      - אסטרטגית
       - ייעוץ אסטרטגי
       - טרנספורמציה דיגיטלית
       - שלטון מקומי
