@@ -13,14 +13,79 @@ version: 1
 geography:
   regions:
     - haifa
-    - north            # Krayot, Akko, Nesher, Tirat Carmel, Yokneam, Karmiel,
-                       # Migdal HaEmek, Nazareth, Afula, Alon Tavor
-    - sharon           # Netanya, Kfar Saba, Raanana, Herzliya, Caesarea, Hadera
-    - center           # Tel Aviv, Ramat Gan, Givatayim, Petah Tikva, Bnei Brak,
-                       # Holon, Rishon LeZion, Rehovot
+    - north
+    - sharon
+    - center
   exclude_regions:
     - south
     - jerusalem
+
+  # The cities each region is made of.
+  #
+  # These were comments on the region names until 2026-08-18. The geography gate
+  # cannot read a comment, so a location field naming Haifa was placed nowhere
+  # and every posting passed on silence. Promoted to data unchanged: no city was
+  # added to a region and none was moved.
+  #
+  # Excluded regions carry lists too. A posting can only be blocked for being
+  # somewhere the spec can name the cities of.
+  #
+  # Spelling variants sit next to their city. The gate matches the text as the
+  # board wrote it and never guesses at a form it was not given, so a variant
+  # that is missing here is a posting that is placed nowhere.
+  cities:
+    haifa:
+      - חיפה
+    north:
+      - קרית ביאליק
+      - קרית מוצקין
+      - קרית ים
+      - קרית אתא
+      - קריות
+      - עכו
+      - נשר
+      - טירת כרמל
+      - יקנעם
+      - כרמיאל
+      - מגדל העמק
+      - נצרת
+      - עפולה
+      - אלון תבור
+    sharon:
+      - נתניה
+      - כפר סבא
+      - רעננה
+      - הרצליה
+      - קיסריה
+      - חדרה
+    center:
+      # 167 of the 191 AllJobs rows write the abbreviation and never the name.
+      - ת"א
+      - ת״א
+      - תל אביב
+      - תל-אביב
+      - תל אביב יפו
+      - תל אביב-יפו
+      - רמת גן
+      - גבעתיים
+      - פתח תקווה
+      - פתח תקוה
+      - בני ברק
+      - חולון
+      - ראשון לציון
+      - רחובות
+    south:
+      - באר שבע
+      - אשדוד
+      - אשקלון
+      - קרית גת
+      - דימונה
+      - אילת
+      - שדרות
+    jerusalem:
+      - ירושלים
+      - מבשרת ציון
+      - בית שמש
   remote:
     israel_based: true
     international: false
@@ -43,13 +108,33 @@ gates:
 
   degree:
     mode: block
-    closed_lists:                  # blocked when the posting demands one of these
-      - computer science           # מדעי המחשב
-      - industrial engineering     # הנדסת תעשייה וניהול
-      - information systems        # מערכות מידע
-      - software engineering       # הנדסת תוכנה
-      - statistics                 # סטטיסטיקה
-      - mathematics                # מתמטיקה
+    # Blocked when the posting demands one of these.
+    #
+    # Every spelling a board might use sits under its list. The Hebrew was a
+    # trailing comment until 2026-08-18, and since every posting in the store is
+    # Hebrew, the gate matched nothing at all and blocked no one. The lists
+    # themselves are unchanged — only the spellings were promoted to data.
+    closed_lists:
+      - name: computer science
+        aliases:
+          - מדעי המחשב
+      - name: industrial engineering
+        aliases:
+          - הנדסת תעשייה וניהול
+          - הנדסת תעשיה וניהול
+          - תעשייה וניהול
+      - name: information systems
+        aliases:
+          - מערכות מידע
+      - name: software engineering
+        aliases:
+          - הנדסת תוכנה
+      - name: statistics
+        aliases:
+          - סטטיסטיקה
+      - name: mathematics
+        aliases:
+          - מתמטיקה
     open_clause_overrides: true    # an open clause cancels the block
     open_clause_markers:           # if any of these appear, the list is not closed
       - "או תואר רלוונטי אחר"
@@ -57,6 +142,13 @@ gates:
       - "השכלה רלוונטית"
       - "or other relevant degree"
       - "relevant degree"
+      # Added 2026-08-18 from the store: two of the ten postings the degree gate
+      # blocked were open lists phrased in wordings nobody had written down.
+      - "תחום דומה"
+      - "תחום כמותי דומה"
+      - "או תחום אחר"
+      - "similar field"
+      - "related field"
     held_degree: "B.A. Government & Strategy, Reichman University"
 
   freshness:
