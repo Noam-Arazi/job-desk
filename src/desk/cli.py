@@ -6,6 +6,7 @@ desk analyze   gates, family, requirements and a fit score over the store
 desk tailor    cut a CV from its approved base for one posting
 desk digest    the daily ranked digest; it never applies for you
 desk state     show or move where a posting stands
+desk evals     score the system against the gold set
 desk spec      show what the search specification currently says
 desk tools     show the registered tools and their permission tiers
 desk routes    show the stage routing table
@@ -383,6 +384,12 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return run_digest(args)
 
 
+def cmd_evals(args: argparse.Namespace) -> int:
+    from .evals.command import cmd_evals as run_evals
+
+    return run_evals(args)
+
+
 def cmd_state(args: argparse.Namespace) -> int:
     from .manager.command import cmd_state as run_state
 
@@ -450,6 +457,13 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--send", action="store_true", help="deliver it; off by default")
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)
+
+    evals = sub.add_parser("evals", help="score the system against the gold set")
+    evals.add_argument("--suite", default="all", help="which suite to run")
+    evals.add_argument("--format", choices=("text", "markdown", "json"), default="text")
+    evals.add_argument("--baseline", default=None, help="a previous result to diff against")
+    evals.add_argument("--out", default=None, help="write the result table here")
+    evals.set_defaults(func=cmd_evals)
 
     state = sub.add_parser("state", help="show or move where a posting stands")
     state.add_argument("--fingerprint", default=None)
