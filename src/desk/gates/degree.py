@@ -72,11 +72,29 @@ def closed_aliases(spec: Mapping[str, Any]) -> dict[str, str]:
     return aliases
 
 
-def open_clause(spec: Mapping[str, Any], text: str) -> str:
+# How far from the demand an open clause can sit and still be about it.
+# Wide enough for a long list — "מדעי המחשב / מערכות מידע / הנדסת תוכנה /
+# מתמטיקה או תחום רלוונטי" is 60 characters before the clause is reached — and
+# narrow enough that a sentence elsewhere in the posting cannot reach it.
+CLAUSE_WINDOW = 150
+
+
+def open_clause(spec: Mapping[str, Any], text: str, *, at: int | None = None) -> str:
+    """The open-clause marker that cancels a demand, if one is near it.
+
+    Proximity matters here more than anywhere else in this gate, because the
+    commonest marker in the store is "או תחום רלוונטי" and "תחום רלוונטי" is
+    also how postings describe experience: "3 שנות ניסיון בתחום רלוונטי" is not
+    an open degree clause, and a marker matched anywhere in the text would read
+    it as one and unblock a posting that never softened its demand.
+    """
     markers = ((spec.get("gates") or {}).get("degree") or {}).get("open_clause_markers") or ()
+    window = text
+    if at is not None:
+        window = text[max(0, at - CLAUSE_WINDOW) : at + CLAUSE_WINDOW]
     for marker in markers:
         flat = readable(str(marker))
-        if flat and flat in text:
+        if flat and flat in window:
             return flat
     return ""
 
@@ -111,15 +129,19 @@ def check(*, spec: Mapping[str, Any], title: str = "", body: str = "") -> GateRe
     spelling, name, at = hits[0]
     named = sorted({h[1] for h in hits})
 
-    marker = open_clause(spec, text) if rules.get("open_clause_overrides", True) else ""
-    if marker:
-        return GateResult(
-            GATE,
-            Verdict.PASS,
-            reason=f"names {', '.join(named)}, but an open clause cancels the list",
-            evidence=marker,
-            details={"closed_lists": named, "open_clause": marker},
-        )
+    # Every demand has to be softened, not just one. A posting that offers an
+    # alternative to its first list and none to its second is still closed on
+    # the second.
+    if rules.get("open_clause_overrides", True):
+        markers = [open_clause(spec, text, at=hit[2]) for hit in hits]
+        if all(markers):
+            return GateResult(
+                GATE,
+                Verdict.PASS,
+                reason=f"names {', '.join(named)}, but an open clause cancels the list",
+                evidence=markers[0],
+                details={"closed_lists": named, "open_clause": markers[0]},
+            )
 
     return GateResult(
         GATE,

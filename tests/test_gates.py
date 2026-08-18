@@ -125,6 +125,18 @@ def test_a_location_naming_nothing_recognisable_does_not_block(spec) -> None:
     assert not result.blocks
 
 
+def test_the_missing_city_report_does_not_count_working_from_home(spec) -> None:
+    """It is not a town the spec forgot, it is a posting the remote rule already
+    handles — and it was the most frequent entry in this report until it was
+    taken out. A list of missing data that is mostly not missing does not get
+    read."""
+    from desk.gates.geography import unknown_cities
+
+    missing = unknown_cities(spec, ["עבודה מהבית", "חיפה", "כפר רופין"])
+
+    assert missing == ["כפר רופין"]
+
+
 def test_every_region_the_spec_names_has_cities(spec) -> None:
     """The gate can only place a posting in a region it has names for.
 
@@ -271,6 +283,44 @@ def test_the_open_clause_the_store_actually_uses_cancels_the_list(spec) -> None:
     )
 
     assert result.verdict is Verdict.PASS
+
+
+def test_the_commonest_open_clause_in_the_store_cancels_the_list(spec) -> None:
+    """52 of the 271 degree blocks on the re-fetched corpus carried this exact
+    wording, and none of it was in the spec."""
+    result = degree.check(spec=spec, body="תואר אקדמי במדעי המחשב, data science או תחום רלוונטי")
+
+    assert result.verdict is Verdict.PASS
+
+
+def test_a_relevant_field_of_experience_is_not_an_open_degree_clause(spec) -> None:
+    """The same three words describe experience far more often than they soften
+    a diploma demand. Matched anywhere in the text they would unblock a posting
+    that never softened anything."""
+    result = degree.check(
+        spec=spec,
+        body=(
+            "דרישות: תואר ראשון במדעי המחשב - חובה. "
+            + "עוד על התפקיד: " * 12
+            + "3 שנות ניסיון בתחום רלוונטי"
+        ),
+    )
+
+    assert result.verdict is Verdict.BLOCK
+
+
+def test_a_second_list_left_closed_still_blocks(spec) -> None:
+    """One softened demand does not soften the other."""
+    result = degree.check(
+        spec=spec,
+        body=(
+            "תואר במדעי המחשב או תחום רלוונטי. "
+            + "פירוט נוסף על הצוות ועל המוצר. " * 8
+            + "בנוסף נדרש תואר בסטטיסטיקה - חובה"
+        ),
+    )
+
+    assert result.verdict is Verdict.BLOCK
 
 
 def test_an_alternative_military_track_does_not_cancel_the_list(spec) -> None:

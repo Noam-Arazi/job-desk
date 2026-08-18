@@ -177,6 +177,15 @@ def unknown_cities(spec: Mapping[str, Any], locations: Iterable[str]) -> list[st
     Not used by the gate itself. It exists so a run can report what the spec's
     city lists are missing, instead of the lists silently going stale as the
     boards start naming towns nobody wrote down.
+
+    "עבודה מהבית" is excluded, and the exclusion is the point: it is not a town
+    the spec forgot, it is a posting the remote rule already handles, and it was
+    the single most frequent entry here until it was taken out. A report of
+    missing data that is mostly not missing data does not get read.
     """
     index = city_index(spec)
-    return [loc for loc in locations if loc and not _found_cities(readable(loc), index)]
+    return [
+        loc
+        for loc in locations
+        if loc and not _found_cities(readable(loc), index) and not _remote_marker(readable(loc))
+    ]

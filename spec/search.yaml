@@ -142,10 +142,20 @@ gates:
       - "השכלה רלוונטית"
       - "or other relevant degree"
       - "relevant degree"
-      # Added 2026-08-18 from the store: two of the ten postings the degree gate
-      # blocked were open lists phrased in wordings nobody had written down.
+      # Added 2026-08-18, measured rather than imagined. On the re-fetched
+      # corpus, 52 of the 271 postings the degree gate blocked carried an open
+      # clause in a wording nobody had written down — "או תחום רלוונטי" alone
+      # accounts for all but a handful.
+      #
+      # A marker only cancels a demand it sits beside. "תחום רלוונטי" is also
+      # how a posting describes experience, and "3 שנות ניסיון בתחום רלוונטי"
+      # must not unblock a closed degree list further up the page.
+      - "תחום רלוונטי"
       - "תחום דומה"
       - "תחום כמותי דומה"
+      - "תחום קשור"
+      - "תחום מקביל"
+      - "השכלה חלופית"
       - "או תחום אחר"
       - "similar field"
       - "related field"
