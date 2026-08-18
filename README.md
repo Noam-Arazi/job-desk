@@ -4,7 +4,7 @@ Every morning: a ranked shortlist of jobs and freelance projects, each with a ta
 
 **The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied unconditionally at the dispatch point, and there is a test that proves a compromised model still cannot reach it.
 
-> Status: session 3 of 9. The skeleton, the policy layer, the model layer and the test suite are built. Scraping (session 4), the analyst (session 5) and CV tailoring (session 6) are not.
+> Status: sessions 1-7 and the measurement half of 9 are built — scraping over three boards, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. XPlace (session 8), the attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
 
 ## Run it with nothing
 
@@ -80,7 +80,7 @@ The input is hostile by construction. A job posting is text written by a strange
 
 ### Libraries considered
 
-**Scrapling** is going in as the fetch layer in session 4, for adaptive element relocation after a site changes its structure. It stays an implementation detail behind each site module, and its fetchers are an optional dependency group so the offline path stays light.
+**Scrapling** is the fetch layer, for adaptive element relocation after a site changes its structure. It stays an implementation detail behind each site module, and it is an optional dependency group so the offline path stays light. One correction earned in use: importing `scrapling.fetchers` pulls curl_cffi and playwright at module load, so the extra that installs "just the HTTP path" has to install them too — a split that looked clean in the dependency table and failed at the first request.
 
 **DeepSeek's agent framework** was rejected — not on quality. It supplies precisely what this repo is meant to demonstrate the author can build: an orchestrator, a tool registry and a policy layer. A repo that assembles those from a dependency shows you can configure a framework, not write one.
 
