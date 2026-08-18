@@ -5,6 +5,8 @@ runs rather than context budgeted inside one:
 
     postings        what has been seen, with its content fingerprint
     fingerprints    the cross-run dedup index; collapses a role seen twice
+    duplicate_links what the resolver concluded about a pair, and whether
+                    arithmetic or a model concluded it
     applications    the applied-blocklist. Its only job is: never show this again
     decisions       what each stage concluded, so the calibration loop has ground
                     to stand on
@@ -78,6 +80,17 @@ CREATE TABLE IF NOT EXISTS decisions (
     created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS decisions_fp ON decisions(fingerprint);
+
+CREATE TABLE IF NOT EXISTS duplicate_links (
+    left_fp     TEXT NOT NULL,
+    right_fp    TEXT NOT NULL,
+    score       REAL NOT NULL,
+    band        TEXT NOT NULL,
+    method      TEXT NOT NULL,
+    decided_at  TEXT NOT NULL,
+    PRIMARY KEY (left_fp, right_fp)
+);
+CREATE INDEX IF NOT EXISTS links_left ON duplicate_links(left_fp);
 
 CREATE TABLE IF NOT EXISTS cv_bases (
     family       TEXT NOT NULL,
@@ -211,6 +224,15 @@ class Store:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def all_postings(self) -> list[dict[str, Any]]:
+        """Every stored row, one per (site, external_id).
+
+        The resolver needs the rows and not the distinct fingerprints: the whole
+        reason it exists is that the fingerprint collapses the wrong things.
+        """
+        rows = self.conn.execute("SELECT * FROM postings ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
     def unseen_postings(self, limit: int = 50) -> list[dict[str, Any]]:
         """Distinct roles that have not been applied to, newest first."""
         rows = self.conn.execute(
@@ -289,8 +311,78 @@ class Store:
         ).fetchone()
         return dict(row) if row else None
 
+    # -- duplicate links (the resolver's output) ---------------------------
+
+    def record_link(
+        self,
+        left: str,
+        right: str,
+        *,
+        score: float,
+        band: str,
+        method: str,
+        now: str,
+    ) -> None:
+        """Store one pair verdict. The pair is ordered so it is written once.
+
+        Every verdict is kept, not only the merges. A pair the arithmetic called
+        distinct is the evidence that it was looked at, and a pair a model was
+        paid for is the line item that makes the escalation rate measurable.
+        """
+        a, b = (left, right) if left <= right else (right, left)
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO duplicate_links(left_fp, right_fp, score, band,"
+                " method, decided_at) VALUES (?,?,?,?,?,?)",
+                (a, b, score, band, method, now),
+            )
+
+    def links(self, band: str | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM duplicate_links"
+        params: tuple[Any, ...] = ()
+        if band is not None:
+            sql += " WHERE band = ?"
+            params = (band,)
+        rows = self.conn.execute(sql + " ORDER BY score DESC", params).fetchall()
+        return [dict(r) for r in rows]
+
+    def merged_with(self, fingerprint: str) -> list[str]:
+        """Every fingerprint the resolver merged with this one, transitively.
+
+        Includes the fingerprint itself, so a role that matched nothing returns
+        a list of one and a caller needs no special case for it.
+        """
+        from ..resolve.resolver import cluster
+
+        pairs = [(r["left_fp"], r["right_fp"]) for r in self.links("duplicate")]
+        keys = {k for pair in pairs for k in pair} | {fingerprint}
+        for group in cluster(keys, pairs):
+            if fingerprint in group:
+                return group
+        return [fingerprint]
+
+    def first_seen(self, fingerprint: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT first_seen_at FROM fingerprints WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    def cluster_first_seen(self, fingerprint: str) -> str | None:
+        """The earliest first-seen across everything merged with this role.
+
+        A role is as old as the first time anyone showed it to us. Without this,
+        a job that has sat on one board for three weeks looks new the day an
+        agency relists it, and the freshness gate passes it every time it moves
+        between sites. Freshness reads this, never the raw per-fingerprint date.
+        """
+        stamps = [s for s in (self.first_seen(f) for f in self.merged_with(fingerprint)) if s]
+        return min(stamps) if stamps else None
+
     def counts(self) -> dict[str, int]:
-        tables = ("runs", "fingerprints", "postings", "applications", "decisions", "cv_bases")
+        tables = (
+            "runs", "fingerprints", "postings", "applications", "decisions",
+            "duplicate_links", "cv_bases",
+        )
         return {
             t: int(self.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]) for t in tables
         }

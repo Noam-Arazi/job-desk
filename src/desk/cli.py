@@ -130,6 +130,85 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0 if result.ok else 1
 
 
+def cmd_resolve(args: argparse.Namespace) -> int:
+    """Find the postings in the store that are one job seen twice.
+
+    A dry run by default, like fetch: it scores, bands and reports, and records
+    nothing. `--write` stores the verdicts. `--judge` is what spends tokens, and
+    it only ever reaches the pairs the arithmetic left uncertain.
+    """
+    from datetime import datetime
+
+    from .resolve import DUPLICATE, UNCERTAIN
+    from .resolve import resolve as resolve_duplicates
+
+    store = Store(paths().ensure().db)
+    rows = store.all_postings()
+    if not rows:
+        print("store is empty; run `desk fetch --site <id> --write` first")
+        store.close()
+        return 1
+
+    judge = None
+    ctx = None
+    if args.judge:
+        from .resolve.judge import gateway_judge
+        from .runner import RunSettings, build_context
+
+        ctx = build_context(RunSettings(budget_usd=args.budget))
+        judge = gateway_judge(ctx.gateway, ctx)
+
+    result = resolve_duplicates(rows, judge=judge)
+    summary = result.summary()
+    by_fp = {r["fingerprint"]: r for r in rows}
+
+    print(f"store    {len(rows)} postings   {'WRITE' if args.write else 'dry run'}")
+    possible = len(rows) * (len(rows) - 1) // 2
+    print(f"compared {summary['compared']} pairs, out of {possible} possible")
+    print(f"merged   {summary['duplicate']} pairs into {summary['clusters']} clusters")
+    print(f"collapse {summary['collapsed']} postings would leave the digest")
+    if judge is None:
+        print(f"escalate {summary['uncertain']} pairs uncertain, no judge attached")
+    else:
+        print(f"judged   {summary['judged']} pairs sent to a model")
+
+    print("")
+    for group in result.clusters[: args.show]:
+        head = by_fp[group[0]]
+        print(f"  cluster of {len(group)}   {head['title'][:56]}")
+        for member in group:
+            row = by_fp[member]
+            print(f"    {row['site']:<11} {row['external_id']:<14} {row['title'][:44]}")
+
+    if args.uncertain:
+        print("")
+        for pair in result.pairs:
+            if pair.band != UNCERTAIN:
+                continue
+            left, right = by_fp[pair.left], by_fp[pair.right]
+            print(f"  uncertain {pair.score:.2f}  core {pair.core:.2f}  body {pair.body:.2f}")
+            print(f"    {left['site']:<11} {left['title'][:56]}")
+            print(f"    {right['site']:<11} {right['title'][:56]}")
+
+    if not args.write:
+        print("")
+        print("nothing recorded. re-run with --write to record the verdicts")
+        store.close()
+        return 0
+
+    now = datetime.now().isoformat(timespec="seconds")
+    for pair in result.pairs:
+        store.record_link(
+            pair.left, pair.right, score=pair.score, band=pair.band,
+            method=pair.method, now=now,
+        )
+    merged = len(store.links(DUPLICATE))
+    store.close()
+    print("")
+    print(f"recorded {len(result.pairs)} verdicts, {merged} of them merges")
+    return 0
+
+
 def cmd_spec(args: argparse.Namespace) -> int:
     spec = load_spec()
     gates = spec["gates"]
@@ -207,6 +286,14 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--show", type=int, default=12, help="how many postings to print")
     fetch.add_argument("--write", action="store_true", help="store instead of dry-running")
     fetch.set_defaults(func=cmd_fetch)
+
+    resolve_cmd = sub.add_parser("resolve", help="find duplicate postings in the store")
+    resolve_cmd.add_argument("--write", action="store_true", help="record the verdicts")
+    resolve_cmd.add_argument("--judge", action="store_true", help="send uncertain pairs to a model")
+    resolve_cmd.add_argument("--budget", type=float, default=None, help="usd ceiling for --judge")
+    resolve_cmd.add_argument("--show", type=int, default=10, help="clusters to print")
+    resolve_cmd.add_argument("--uncertain", action="store_true", help="list the uncertain pairs")
+    resolve_cmd.set_defaults(func=cmd_resolve)
 
     sub.add_parser("spec", help="show the search specification").set_defaults(func=cmd_spec)
     sub.add_parser("tools", help="show registered tools and tiers").set_defaults(func=cmd_tools)

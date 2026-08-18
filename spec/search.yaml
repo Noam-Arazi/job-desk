@@ -177,8 +177,16 @@ sites:
     fetch: scrapling_http
     rate_limit_rps: 0.5
     categories: [ai-engineer, llm-engineer, data-analyst, bi-developer,
-                 data-engineer, product-analyst]
-    notes: small inventory, heavily center-weighted, but high AI relevance
+                 data-engineer, product-analyst, product-manager]
+    notes: >
+      Small inventory, heavily center-weighted, but high AI relevance.
+      An agency, not a board: no free-text search, so this module is driven by
+      the shelves above rather than by the family terms. It states no date and
+      no employer on any listing, by design on the agency's side — posted_at is
+      empty here always and freshness falls back to the store's first-seen.
+      product-manager added 2026-08-18 (112 shelf pages); data-scientist was
+      offered and declined — its postings are algorithm roles behind a closed
+      degree list, which the degree gate would drop anyway.
 
   - id: jobify
     order: 4
