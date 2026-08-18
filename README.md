@@ -20,7 +20,22 @@ The demo ingests four synthetic postings, normalizes them through the model laye
 uv run pytest -q
 ```
 
-Other commands: `desk spec` (what counts as a relevant posting), `desk tools` (the registry and its permission tiers), `desk routes` (the stage routing table), `desk prompts` (prompt versions and hashes), `desk trace <path>`.
+### The daily path, and what each step refuses to do
+
+```
+desk fetch     scrape one board            dry run unless --write
+desk resolve   collapse duplicates         dry run unless --write
+desk analyze   gates, family, requirements, fit    dry run unless --write
+desk tailor    cut a CV from its base      dry run unless --write
+desk digest    the ranked shortlist        never applies, ever
+desk state     move one posting along      the human's act, recorded
+```
+
+Every one of them is a dry run by default. That is not caution for its own sake: a prompt edit or a spec change should be observable before it is recorded, because what one command stores is what the next one reads.
+
+Two more exist for measuring rather than running: `desk evals` scores the system against the hand-labelled gold set and prints the measurements table, and `desk baseline` runs the single-agent comparison the table is measured against — one conversation, one model, no gates.
+
+Reading commands, which change nothing: `desk spec` (what counts as a relevant posting), `desk tools` (the registry and its permission tiers), `desk routes` (the stage routing table), `desk prompts` (prompt versions and hashes), `desk label` (build the gold set by hand), `desk trace <path>`.
 
 ## How it is put together
 
@@ -42,7 +57,7 @@ src/desk/
 | Pattern | Where it lives | The test that pins it down |
 |---|---|---|
 | Tool use | `registry.py` | schema↔handler identity in both directions; tool errors return as `tool_result` and never raise |
-| Reflection | `analyst.py` (session 5) | generator/evaluator loop on requirement extraction, span-anchored |
+| Reflection | `analyst/reflect.py` | generator/evaluator loop on requirement extraction; the span check runs in Python first, so a fabricated requirement is deleted without a model call |
 | Planning | `orchestrator.py` | a typed plan whose dependency graph is validated before anything runs |
 | Orchestrator + workers | `pipeline.py`, agents | per-step token accounting against a single-agent baseline |
 | Memory | `store/` | content fingerprints stable under whitespace, casing and HTML; cross-run dedup; the applied blocklist |
