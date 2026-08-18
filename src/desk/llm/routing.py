@@ -106,6 +106,12 @@ TABLE: dict[str, Route] = {
     # two short strings, not a reading of the posting.
     "reflect_anchors": _route("reflect_anchors", HAIKU, "low"),
     "fit_score": _route("fit_score", SONNET, "medium", thinking=True),
+    # Exists only for the baseline the measurements table compares against.
+    # A single agent has no routing table: it holds one conversation and one
+    # model does normalising, extraction and scoring together, so the tier
+    # here is the strongest tier any of those stages needs. Routing it lower
+    # would flatter the orchestrated side of the comparison.
+    "single_agent_turn": _route("single_agent_turn", SONNET, "medium", thinking=True),
     "tailor_cv": _route("tailor_cv", SONNET, "high", thinking=True),
     "verify_no_fabrication": _route("verify_no_fabrication", HAIKU, "low"),
     "freelance_proposal": _route("freelance_proposal", SONNET, "medium", thinking=True),

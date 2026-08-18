@@ -1272,3 +1272,43 @@ def test_a_missing_baseline_file_is_refused_rather_than_treated_as_empty(
 def test_every_named_suite_is_reachable_from_the_command(store, spec) -> None:
     results = evals_command.run_suites(list(evals_command.SUITES), store=store, spec=spec, now=NOW)
     assert [r.suite for r in results] == list(evals_command.SUITES)
+
+
+def test_a_baseline_that_died_is_missing_and_not_a_measured_zero() -> None:
+    """A failed baseline run is the most flattering possible lie.
+
+    The run starts, the engine refuses, and the trace fills with model.end
+    events carrying ok=false and zero tokens. Read as data that says "measured
+    baseline: 0 tokens, context saving 0.0x" — a number that would go straight
+    into the README table and be wrong in our own favour.
+    """
+    from desk.evals import cost
+
+    orchestrated = [
+        {
+            "kind": "model.end",
+            "name": "extract_requirements",
+            "model": "claude-sonnet-5",
+            "ok": True,
+            "usage": {"input_tokens": 900, "output_tokens": 120, "cache_read_tokens": 0},
+        }
+    ]
+    died = [
+        {
+            "kind": "model.end",
+            "name": "single_agent_turn",
+            "model": "claude-sonnet-5",
+            "ok": False,
+            "error": "ClaudeCodeError: OAuth session expired",
+            "usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0},
+        }
+    ]
+    result = cost.run(
+        runs_dir=Path("."),
+        traces={"analyze-0000": orchestrated, cost.BASELINE_RUN: died},
+    )
+    baseline = [m for m in result.measurements if m.name == "measured single-agent baseline"]
+    assert len(baseline) == 1
+    assert baseline[0].value is None, "a died baseline must report as missing"
+    assert "not a measurement of zero" in (baseline[0].missing or "")
+    assert not [m for m in result.measurements if m.name == "measured context saving"]

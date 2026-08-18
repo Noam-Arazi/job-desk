@@ -77,6 +77,11 @@ NO_BASELINE = (
     f"no single-agent baseline trace at runs/{BASELINE_RUN}/trace.jsonl; the "
     "comparison below is a projection, not a second run"
 )
+FAILED_BASELINE = (
+    f"the trace at runs/{BASELINE_RUN}/ has no successful model call — the baseline "
+    "run started and died, most likely on the engine. A failed run is not a "
+    "measurement of zero"
+)
 NO_LATENCY = (
     "the trace omits elapsed time on purpose — it is the one field that would "
     "break byte-identical replay (see src/desk/trace.py); measuring it needs a "
@@ -290,7 +295,17 @@ def run(
     notes = [PRICE_NOTE]
     if self_note:
         notes.append(self_note)
-    if baseline_events is None:
+    # A baseline that started and died leaves a trace full of failed calls with
+    # zero tokens on them. Read as data it says "measured: 0 tokens, saving
+    # 0.0x", which is the most flattering possible lie about the orchestrated
+    # side. An unsuccessful run is missing data, exactly like no run at all.
+    if baseline_events is not None and not any(
+        call.get("ok") is not False and int((call.get("usage") or {}).get("input_tokens", 0))
+        for call in model_calls(baseline_events)
+    ):
+        measurements.append(missing("measured single-agent baseline", FAILED_BASELINE, unit=TOKENS))
+        notes.append(FAILED_BASELINE)
+    elif baseline_events is None:
         measurements.append(missing("measured single-agent baseline", NO_BASELINE, unit=TOKENS))
         notes.append(NO_BASELINE)
     else:

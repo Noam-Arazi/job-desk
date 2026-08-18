@@ -8,6 +8,7 @@ desk digest    the daily ranked digest; it never applies for you
 desk state     show or move where a posting stands
 desk propose   draft a short proposal for one freelance project
 desk evals     score the system against the gold set
+desk baseline  one conversation over every posting, for the comparison
 desk spec      show what the search specification currently says
 desk tools     show the registered tools and their permission tiers
 desk routes    show the stage routing table
@@ -385,6 +386,57 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return run_digest(args)
 
 
+def cmd_baseline(args: argparse.Namespace) -> int:
+    """The expensive arm of the experiment, run deliberately and never daily.
+
+    One conversation over every posting, one model, and no gates — the thing a
+    competent person builds first, so that what this repo builds instead has
+    something to be compared against. It writes its trace to runs/single-agent/,
+    which is exactly where `desk evals` looks for a measured baseline.
+    """
+    from .baseline import RUN_ID
+    from .baseline import run as run_baseline
+    from .config import load_spec
+
+    spec = load_spec()
+    store = Store(paths().ensure().db)
+    rows = store.all_postings()[: args.limit]
+    if not rows:
+        print("nothing in the store to run a baseline over")
+        store.close()
+        return 1
+
+    if args.engine == "replay":
+        print("a baseline on the replay engine measures cassettes, not a run.")
+        print("re-run with --engine claude-code once the CLI is authenticated.")
+        if not args.force:
+            store.close()
+            return 1
+
+    settings = settings_from_env(engine=args.engine, budget_usd=args.budget)
+    settings.mode = RUN_ID
+    settings.run_id = RUN_ID
+    ctx = build_context(settings)
+    try:
+        answers = run_baseline(rows, ctx=ctx, spec=spec)
+    except Exception as exc:  # noqa: BLE001 — the engine's own message is the answer
+        print(f"the baseline stopped: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"partial trace at {ctx.tracer.path}", file=sys.stderr)
+        store.close()
+        ctx.store.close()
+        return 1
+
+    total = ctx.tracer.total
+    print(f"run      {ctx.run_id}   engine={args.engine}")
+    print(f"trace    {ctx.tracer.path}")
+    print(f"postings {len(answers)} sent through one conversation, no gates")
+    print(f"tokens   in={total.input_tokens} out={total.output_tokens}")
+    print(f"list     ${total.cost_usd:.6f} at API list price, for comparison only")
+    store.close()
+    ctx.store.close()
+    return 0
+
+
 def cmd_propose(args: argparse.Namespace) -> int:
     from .freelance.command import cmd_propose as run_propose
 
@@ -464,6 +516,13 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--send", action="store_true", help="deliver it; off by default")
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)
+
+    baseline = sub.add_parser("baseline", help="the single-agent run the table compares against")
+    baseline.add_argument("--limit", type=int, default=20, help="postings to send")
+    baseline.add_argument("--engine", choices=ENGINES, default="claude-code")
+    baseline.add_argument("--budget", type=float, default=5.00, help="cost ceiling in USD")
+    baseline.add_argument("--force", action="store_true", help="run it on replay anyway")
+    baseline.set_defaults(func=cmd_baseline)
 
     propose = sub.add_parser("propose", help="draft a proposal for one freelance project")
     propose.add_argument("--fingerprint", required=True)

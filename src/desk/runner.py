@@ -35,6 +35,12 @@ class RunSettings:
     record: bool = False
     root: Path | None = None
     seed: int = 0
+    # Normally the run id is derived from the mode, which keeps runs of the same
+    # kind from overwriting one another. The single-agent baseline is the one
+    # exception: the eval harness looks for it at exactly runs/single-agent/,
+    # because a baseline is a fixed point being compared against and not one
+    # more run in a series.
+    run_id: str | None = None
 
 
 def _client(settings: RunSettings) -> Any:
@@ -59,7 +65,7 @@ def build_context(settings: RunSettings | None = None) -> RunContext:
     paths = default_paths(settings.root).ensure()
 
     clock = FrozenClock() if settings.deterministic else WallClock()
-    run_id = (
+    run_id = settings.run_id or (
         f"{settings.mode}-{settings.seed:04d}"
         if settings.deterministic
         else f"{settings.mode}-{WallClock().now().replace(':', '').replace('-', '')}"

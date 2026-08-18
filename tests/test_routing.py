@@ -23,6 +23,7 @@ EXPECTED = {
     "reflect_anchors": HAIKU,
     "extract_requirements": SONNET,
     "fit_score": SONNET,
+    "single_agent_turn": SONNET,
     "tailor_cv": SONNET,
     "freelance_proposal": SONNET,
     "outreach_draft": SONNET,
