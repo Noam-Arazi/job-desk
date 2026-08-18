@@ -180,8 +180,36 @@ sites:
                  data-engineer, product-analyst]
     notes: small inventory, heavily center-weighted, but high AI relevance
 
-  - id: linkedin
+  - id: jobify
     order: 4
+    enabled: true
+    fetch: attached_browser        # the already-logged-in Chrome session
+    rate_limit_rps: 0.2            # twenty page loads a day, at human pace
+    stealth: false                 # no bypass; the site invites reading
+    role_shelves_from: profile     # the 20 roles Noam picked in his account
+    server_side_filters:           # applied by the site, not by us
+      radius_km_from: haifa
+      salary_floor_nis: 10000
+      window: since_my_last_visit
+    notes: >
+      An aggregator, not a board — Joint / Ministry of Labour backed. It fans
+      in at least eight sources and two of them are already ours: the URL
+      suffix names the origin (aj alljobs, vip the alljobs VIP board, dr
+      drushim, in indeed, emp a direct employer, jk/id/sh unidentified).
+      It does NOT dedupe across its own sources: the same role was seen twice
+      on one page, once -dr and once -jk. Enabled anyway because it is the
+      only source that states employer, real city, scope and arrangement per
+      card, and the only one whose server-side filters are the spec's own —
+      radius instead of a city list, a salary floor, and a since-last-visit
+      window. Its public path is not viable: the sitemap is 2,199 shards with
+      no titles, so a week is ~20k requests. The logged-in path is 20 page
+      loads a day. Two things it reports are its own estimates and never
+      facts: the salary band, which the site itself labels AI-derived and not
+      the employer's, and its match percentage. Both enter as signals; the
+      analyst is measured against Noam's labels, not against Jobify's model.
+
+  - id: linkedin
+    order: 5
     enabled: false                 # enabled last, deliberately
     fetch: attached_browser        # the already-logged-in Chrome session
     rate_limit_rps: 0.1            # human pace
@@ -192,7 +220,7 @@ sites:
       and can be switched off without affecting the rest of the run.
 
   - id: xplace
-    order: 5
+    order: 6
     enabled: true
     fetch: scrapling_http
     rate_limit_rps: 0.5

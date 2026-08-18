@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from . import alljobs, drushim
+from . import alljobs, drushim, gotfriends
 from .base import (
     Fetcher,
     RawPosting,
@@ -27,6 +27,7 @@ Crawler = Callable[..., SiteResult]
 MODULES: dict[str, Crawler] = {
     alljobs.SITE: alljobs.crawl,
     drushim.SITE: drushim.crawl,
+    gotfriends.SITE: gotfriends.crawl,
 }
 
 
@@ -54,6 +55,7 @@ __all__ = [
     "ThrottledFetcher",
     "alljobs",
     "drushim",
+    "gotfriends",
     "search_terms",
     "available",
     "rate_limit",

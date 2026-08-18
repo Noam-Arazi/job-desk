@@ -96,10 +96,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(f"error    {error}")
     if result.stopped_because:
         print(f"stopped  {result.stopped_because}")
+    for note in result.notes:
+        print(f"note     {note}")
 
     undated = [p for p in result.postings if not p.posted_at]
     if undated:
-        print(f"undated  {len(undated)} postings whose date did not parse")
+        print(f"undated  {len(undated)} postings carrying no date")
 
     print("")
     for posting in result.postings[: args.show]:

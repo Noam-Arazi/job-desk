@@ -85,6 +85,11 @@ class SiteResult:
     # by several terms is stored once; the terms that found it are a prior for
     # routing it to a CV family later.
     matched_terms: dict[str, list[str]] = field(default_factory=dict)
+    # Things the module wants the human to know that are not failures: a board
+    # that publishes no dates, an argument that could not reach it. Without
+    # somewhere to say them, a module has only the choice between raising over
+    # a non-error and staying quiet about something that matters.
+    notes: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:

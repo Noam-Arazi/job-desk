@@ -45,6 +45,9 @@ inputs:
 # A tailored CV that drops one of these is worse than no tailoring at all:
 # an outside reader stops understanding what Noam actually did.
 # Wording inside an anchor may be ATS-swapped; the claim must survive intact.
+# Noam ruled on this 2026-08-18, confirming the default: an anchor is not
+# frozen, but a swap that strengthens the claim is a claim change and is
+# forbidden by `scope_unchanged` below.
 # ---------------------------------------------------------------------------
 anchors:
 

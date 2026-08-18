@@ -33,7 +33,24 @@ def test_linkedin_is_last_of_the_job_boards_disabled_and_uses_no_stealth():
 
 
 def test_the_enabled_sites_are_ordered():
-    assert enabled_sites() == ["alljobs", "drushim", "gotfriends", "xplace"]
+    assert enabled_sites() == ["alljobs", "drushim", "gotfriends", "jobify", "xplace"]
+
+
+def test_jobify_reads_through_the_browser_but_is_on_by_default():
+    """It shares LinkedIn's access route and nothing else about its stance.
+
+    The logged-in session is needed because the public path is a 2,199-shard
+    sitemap with no titles, not because the site withholds anything: it
+    invites reading, it forbids none, and no bypass is used. So unlike
+    LinkedIn it ships enabled.
+    """
+    jobify = next(s for s in load_spec()["sites"] if s["id"] == "jobify")
+    linkedin = next(s for s in load_spec()["sites"] if s["id"] == "linkedin")
+
+    assert jobify["fetch"] == "attached_browser"
+    assert jobify["stealth"] is False
+    assert jobify["enabled"] is True
+    assert jobify["order"] < linkedin["order"]
 
 
 def test_the_scheduled_job_has_an_explicit_timeout():
