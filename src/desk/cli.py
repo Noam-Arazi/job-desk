@@ -199,13 +199,102 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     now = datetime.now().isoformat(timespec="seconds")
     for pair in result.pairs:
         store.record_link(
-            pair.left, pair.right, score=pair.score, band=pair.band,
-            method=pair.method, now=now,
+            pair.left,
+            pair.right,
+            score=pair.score,
+            band=pair.band,
+            method=pair.method,
+            now=now,
         )
     merged = len(store.links(DUPLICATE))
     store.close()
     print("")
     print(f"recorded {len(result.pairs)} verdicts, {merged} of them merges")
+    return 0
+
+
+def cmd_label(args: argparse.Namespace) -> int:
+    """Build the gold set: thirty postings, judged before anything is revealed.
+
+    Nothing on screen says what the gates concluded or what any model would
+    score. That is deliberate and it is the only reason the resulting number
+    means anything — see the module docstring in label.py.
+    """
+    from datetime import datetime
+
+    from . import label as gold
+
+    store = Store(paths().ensure().db)
+    rows = store.all_postings()
+    if not rows:
+        print("store is empty; run `desk fetch --site <id> --write` first")
+        store.close()
+        return 1
+
+    spec = load_spec()
+    now = datetime.now()
+    existing = store.labels()
+
+    if args.review:
+        report = gold.agreement(rows, existing, spec=spec, now=now)
+        if not report.labelled:
+            print("nothing labelled yet; run `desk label` first")
+            store.close()
+            return 1
+        print(f"labelled  {report.labelled}")
+        print(f"agreed    {report.agreed}  ({report.rate:.0%}) gates against you")
+        print(f"dropped   {report.gate_blocked_human_wanted} you would have wanted")
+        print(f"passed    {report.gate_passed_human_irrelevant} you called irrelevant")
+        print("")
+        print("The first number is the expensive one: you never see those.")
+        store.close()
+        return 0
+
+    items = gold.sample(
+        rows,
+        spec=spec,
+        now=now,
+        size=args.count,
+        seed=args.seed,
+        exclude=frozenset(existing),
+    )
+    if not items:
+        print(f"nothing left to label; {len(existing)} already recorded")
+        store.close()
+        return 0
+
+    print(f"{len(items)} postings.")
+    print("1 = a good fit · 2 = maybe · 3 = not for me · s = skip · q = stop")
+    print("Nothing here tells you what the system thought. That is on purpose.")
+    print("")
+    done = 0
+    for index, item in enumerate(items, start=1):
+        print("=" * 72)
+        print(f"[{index}/{len(items)}]")
+        print(item.render())
+        print("")
+        try:
+            answer = input("1/2/3/s/q > ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+        if answer == "q":
+            break
+        if answer == "s" or answer not in {"1", "2", "3"}:
+            continue
+        store.put_label(
+            item.fingerprint,
+            {"1": gold.HIGH, "2": gold.MEDIUM, "3": gold.IRRELEVANT}[answer],
+            stratum=item.stratum,
+            now=now.isoformat(timespec="seconds"),
+        )
+        done += 1
+
+    total = len(store.labels())
+    print("")
+    print(f"recorded {done} this pass, {total} in the store")
+    print("`desk label --review` compares them against the gates.")
+    store.close()
     return 0
 
 
@@ -294,6 +383,14 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_cmd.add_argument("--show", type=int, default=10, help="clusters to print")
     resolve_cmd.add_argument("--uncertain", action="store_true", help="list the uncertain pairs")
     resolve_cmd.set_defaults(func=cmd_resolve)
+
+    label_cmd = sub.add_parser("label", help="build the gold set by hand, unprompted")
+    label_cmd.add_argument("--count", type=int, default=30)
+    label_cmd.add_argument("--seed", type=int, default=0, help="same seed, same sample")
+    label_cmd.add_argument(
+        "--review", action="store_true", help="compare recorded labels against the gates"
+    )
+    label_cmd.set_defaults(func=cmd_label)
 
     sub.add_parser("spec", help="show the search specification").set_defaults(func=cmd_spec)
     sub.add_parser("tools", help="show registered tools and tiers").set_defaults(func=cmd_tools)

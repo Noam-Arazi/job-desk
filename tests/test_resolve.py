@@ -74,9 +74,7 @@ def test_an_agency_blurb_after_the_role_is_cut() -> None:
     assert role_core("Senior BI Developer בחברת סטארט-אפ בתחום ה-Analytics") == (
         "Senior BI Developer"
     )
-    assert role_core("NLP Engineer לחברת סטארטאפ בתל אביב העוסקת בתחום המדיקל") == (
-        "NLP Engineer"
-    )
+    assert role_core("NLP Engineer לחברת סטארטאפ בתל אביב העוסקת בתחום המדיקל") == ("NLP Engineer")
 
 
 def test_an_employer_lead_in_before_the_role_is_cut() -> None:
@@ -85,12 +83,8 @@ def test_an_employer_lead_in_before_the_role_is_cut() -> None:
     The opposite order to the agency's, which is why one rule cannot serve both
     and why comparing raw titles scores these two shapes as unrelated.
     """
-    assert role_core("לחברת הביטוח AIG דרושים /ות נציגים /ות למוקד שירות") == (
-        "נציגים למוקד שירות"
-    )
-    assert role_core("חברת סטארטאפ לאחר Seed מגייסת NLP Researcher - תל אביב") == (
-        "NLP Researcher"
-    )
+    assert role_core("לחברת הביטוח AIG דרושים /ות נציגים /ות למוקד שירות") == ("נציגים למוקד שירות")
+    assert role_core("חברת סטארטאפ לאחר Seed מגייסת NLP Researcher - תל אביב") == ("NLP Researcher")
 
 
 def test_an_unspaced_hyphen_is_part_of_a_word_and_never_a_separator() -> None:
@@ -143,7 +137,7 @@ def test_shingles_of_a_missing_body_are_empty_and_match_nothing() -> None:
 
 
 def test_character_shingles_survive_a_hebrew_prefix() -> None:
-    """"בחברה" and "לחברה" share no word token and four of five characters."""
+    """ "בחברה" and "לחברה" share no word token and four of five characters."""
     assert body_similarity("עבודה בחברה מובילה", "עבודה לחברה מובילה") > 0.5
 
 
@@ -267,7 +261,12 @@ def test_the_summary_reports_what_was_settled_and_what_was_paid_for() -> None:
     assert summary["judged"] == 0
     assert summary["collapsed"] == 0
     assert set(summary) == {
-        "compared", "duplicate", "uncertain", "judged", "clusters", "collapsed",
+        "compared",
+        "duplicate",
+        "uncertain",
+        "judged",
+        "clusters",
+        "collapsed",
     }
 
 
@@ -287,8 +286,12 @@ def test_a_merged_role_is_as_old_as_the_first_time_anyone_showed_it(ctx) -> None
     ctx.store.upsert_posting(old, now="2026-07-20T09:00:00")
     ctx.store.upsert_posting(new, now="2026-08-18T09:00:00")
     ctx.store.record_link(
-        old.fingerprint, new.fingerprint,
-        score=0.9, band=DUPLICATE, method="deterministic", now="2026-08-18T09:00:00",
+        old.fingerprint,
+        new.fingerprint,
+        score=0.9,
+        band=DUPLICATE,
+        method="deterministic",
+        now="2026-08-18T09:00:00",
     )
 
     assert ctx.store.first_seen(new.fingerprint) == "2026-08-18T09:00:00"

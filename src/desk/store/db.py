@@ -1,6 +1,6 @@
 """The store — the memory pattern, on sqlite.
 
-It holds five things, and every one of them is state that has to survive between
+It holds seven things, and every one of them is state that has to survive between
 runs rather than context budgeted inside one:
 
     postings        what has been seen, with its content fingerprint
@@ -11,6 +11,9 @@ runs rather than context budgeted inside one:
     decisions       what each stage concluded, so the calibration loop has ground
                     to stand on
     cv_bases        the approved bases from session 2, hash-pinned
+    labels          Noam's own verdicts on real postings — the gold set the
+                    analyst is measured against. It lives here and not in a file
+                    because it is real posting data, which never enters git
 """
 
 from __future__ import annotations
@@ -91,6 +94,14 @@ CREATE TABLE IF NOT EXISTS duplicate_links (
     PRIMARY KEY (left_fp, right_fp)
 );
 CREATE INDEX IF NOT EXISTS links_left ON duplicate_links(left_fp);
+
+CREATE TABLE IF NOT EXISTS labels (
+    fingerprint  TEXT PRIMARY KEY,
+    label        TEXT NOT NULL,
+    stratum      TEXT NOT NULL,
+    labelled_at  TEXT NOT NULL,
+    note         TEXT
+);
 
 CREATE TABLE IF NOT EXISTS cv_bases (
     family       TEXT NOT NULL,
@@ -378,10 +389,39 @@ class Store:
         stamps = [s for s in (self.first_seen(f) for f in self.merged_with(fingerprint)) if s]
         return min(stamps) if stamps else None
 
+    # -- the gold set ------------------------------------------------------
+
+    def put_label(
+        self, fingerprint: str, label: str, *, stratum: str, now: str, note: str = ""
+    ) -> None:
+        """Record one human verdict. Re-labelling the same posting replaces it."""
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO labels(fingerprint, label, stratum, labelled_at, note)"
+                " VALUES (?,?,?,?,?)",
+                (fingerprint, label, stratum, now, note),
+            )
+
+    def labels(self) -> dict[str, dict[str, Any]]:
+        rows = self.conn.execute("SELECT * FROM labels").fetchall()
+        return {r["fingerprint"]: dict(r) for r in rows}
+
+    def is_labelled(self, fingerprint: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM labels WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        return row is not None
+
     def counts(self) -> dict[str, int]:
         tables = (
-            "runs", "fingerprints", "postings", "applications", "decisions",
-            "duplicate_links", "cv_bases",
+            "runs",
+            "fingerprints",
+            "postings",
+            "applications",
+            "decisions",
+            "duplicate_links",
+            "cv_bases",
+            "labels",
         )
         return {
             t: int(self.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]) for t in tables

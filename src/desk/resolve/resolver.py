@@ -60,9 +60,25 @@ UNCERTAIN_FLOOR = 0.25
 # staffing. Two postings whose rank words differ are two openings, and no amount
 # of shared prose changes that.
 _RANK = {
-    "senior", "junior", "lead", "leader", "head", "principal", "staff", "chief",
-    "director", "manager", "team", "expert", "בכיר", "זוטר", "ראש", "מוביל",
-    "מנהל", "מומחה", "צוות",
+    "senior",
+    "junior",
+    "lead",
+    "leader",
+    "head",
+    "principal",
+    "staff",
+    "chief",
+    "director",
+    "manager",
+    "team",
+    "expert",
+    "בכיר",
+    "זוטר",
+    "ראש",
+    "מוביל",
+    "מנהל",
+    "מומחה",
+    "צוות",
 }
 
 
@@ -148,8 +164,13 @@ def score_pair(left: Mapping[str, Any], right: Mapping[str, Any]) -> PairScore:
         same_rank=_ranks(left) == _ranks(right),
     )
     return PairScore(
-        left=_key(left), right=_key(right), core=core, body=body,
-        company=company, score=score, band=band,
+        left=_key(left),
+        right=_key(right),
+        core=core,
+        body=body,
+        company=company,
+        score=score,
+        band=band,
     )
 
 
@@ -256,9 +277,14 @@ def resolve(
             verdict = judge(rows[left], rows[right], scored)
             judged += 1
             scored = PairScore(
-                left=scored.left, right=scored.right, core=scored.core,
-                body=scored.body, company=scored.company, score=scored.score,
-                band=DUPLICATE if verdict else DISTINCT, method="judged",
+                left=scored.left,
+                right=scored.right,
+                core=scored.core,
+                body=scored.body,
+                company=scored.company,
+                score=scored.score,
+                band=DUPLICATE if verdict else DISTINCT,
+                method="judged",
             )
         pairs.append(scored)
 

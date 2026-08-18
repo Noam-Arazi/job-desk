@@ -312,6 +312,6 @@ def test_a_failed_query_does_not_take_the_others_down() -> None:
         fetcher, spec=load_spec(), now=NOW, terms=["בדיקה"], regions=[1, 10], max_pages=1
     )
 
-    assert result.errors                      # the failure is reported
+    assert result.errors  # the failure is reported
     assert not result.ok
-    assert result.postings                    # and the healthy region still produced
+    assert result.postings  # and the healthy region still produced
