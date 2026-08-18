@@ -273,6 +273,17 @@ def test_the_open_clause_the_store_actually_uses_cancels_the_list(spec) -> None:
     assert result.verdict is Verdict.PASS
 
 
+def test_an_alternative_military_track_does_not_cancel_the_list(spec) -> None:
+    """Noam's call, 18.08.2026. It reads like an open clause and is not one: in
+    practice the alternative is written "ניסיון טכנולוגי" and means 8200, which
+    he does not have. A posting offering the degree or that service is closed to
+    him on both paths, so the block stands.
+    """
+    result = degree.check(spec=spec, body="תואר בסטטיסטיקה/ מתמטיקה/ תואר טכנולוגי או ניסיון צבאי")
+
+    assert result.verdict is Verdict.BLOCK
+
+
 def test_a_field_named_without_a_diploma_demanded_is_not_a_requirement(spec) -> None:
     result = degree.check(spec=spec, body="הצוות עוסק בסטטיסטיקה יישומית ובמידול")
 
