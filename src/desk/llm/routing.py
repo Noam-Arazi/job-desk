@@ -99,6 +99,12 @@ TABLE: dict[str, Route] = {
     "route_family": _route("route_family", HAIKU, "low"),
     "dedup_tiebreak": _route("dedup_tiebreak", HAIKU, "low"),
     "extract_requirements": _route("extract_requirements", SONNET, "medium", thinking=True),
+    # The evaluator half of the extraction loop. It is deliberately a tier
+    # below the generator: the Python check has already thrown out every span
+    # that is not literally in the posting, so what is left for the model is
+    # "does this quote actually support this requirement" — a comparison over
+    # two short strings, not a reading of the posting.
+    "reflect_anchors": _route("reflect_anchors", HAIKU, "low"),
     "fit_score": _route("fit_score", SONNET, "medium", thinking=True),
     "tailor_cv": _route("tailor_cv", SONNET, "high", thinking=True),
     "verify_no_fabrication": _route("verify_no_fabrication", HAIKU, "low"),

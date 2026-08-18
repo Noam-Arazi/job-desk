@@ -111,6 +111,48 @@ CREATE TABLE IF NOT EXISTS cv_bases (
     approved_at  TEXT NOT NULL,
     PRIMARY KEY (family, language)
 );
+
+CREATE TABLE IF NOT EXISTS analyses (
+    fingerprint  TEXT PRIMARY KEY,
+    run_id       TEXT,
+    family       TEXT NOT NULL,
+    score        REAL,
+    channel      TEXT,
+    rationale    TEXT,
+    stopped_at   TEXT NOT NULL DEFAULT '',
+    payload      TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS analyses_score ON analyses(score);
+
+CREATE TABLE IF NOT EXISTS pipeline_state (
+    fingerprint  TEXT PRIMARY KEY,
+    state        TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    due_at       TEXT,
+    note         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS state_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    fingerprint  TEXT NOT NULL,
+    from_state   TEXT,
+    to_state     TEXT NOT NULL,
+    at           TEXT NOT NULL,
+    source       TEXT NOT NULL DEFAULT 'system',
+    note         TEXT
+);
+CREATE INDEX IF NOT EXISTS state_events_fp ON state_events(fingerprint);
+
+CREATE TABLE IF NOT EXISTS tailored (
+    fingerprint  TEXT PRIMARY KEY,
+    family       TEXT NOT NULL,
+    language     TEXT NOT NULL,
+    base_sha256  TEXT NOT NULL,
+    path         TEXT NOT NULL,
+    changes      TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
 """
 
 
@@ -412,6 +454,160 @@ class Store:
         ).fetchone()
         return row is not None
 
+    # -- what the analyst concluded ---------------------------------------
+    #
+    # One row per posting and not one per run. A re-analysis replaces the old
+    # verdict rather than accumulating a history: the history that matters is
+    # the trace, which records which prompt version produced which answer, and
+    # a second copy here would only be a second thing to keep in agreement.
+
+    def put_analysis(
+        self,
+        fingerprint: str,
+        payload: str,
+        *,
+        family: str,
+        score: float | None,
+        channel: str,
+        rationale: str,
+        stopped_at: str,
+        now: str,
+        run_id: str | None = None,
+    ) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO analyses(fingerprint, run_id, family, score, channel,"
+                " rationale, stopped_at, payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    fingerprint,
+                    run_id,
+                    family,
+                    score,
+                    channel,
+                    rationale,
+                    stopped_at,
+                    payload,
+                    now,
+                ),
+            )
+
+    def get_analysis(self, fingerprint: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM analyses WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def analyses(self, *, min_score: float | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM analyses"
+        args: tuple[Any, ...] = ()
+        if min_score is not None:
+            sql += " WHERE score >= ?"
+            args = (min_score,)
+        sql += " ORDER BY score DESC"
+        return [dict(r) for r in self.conn.execute(sql, args).fetchall()]
+
+    def unanalysed_postings(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Postings with no analysis row yet, newest first.
+
+        Duplicates are excluded here rather than in the analyst: a cluster the
+        resolver already merged is one role, and paying to score it twice is
+        the exact cost the resolver exists to avoid.
+        """
+        rows = self.conn.execute(
+            "SELECT p.* FROM postings p"
+            " LEFT JOIN analyses a ON a.fingerprint = p.fingerprint"
+            " WHERE a.fingerprint IS NULL"
+            " ORDER BY COALESCE(p.posted_at, p.fetched_at) DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -- where each posting stands ----------------------------------------
+
+    def set_state(
+        self,
+        fingerprint: str,
+        state: str,
+        *,
+        now: str,
+        due_at: str | None = None,
+        note: str = "",
+        source: str = "system",
+    ) -> str | None:
+        """Move a posting to a state and record the move. Returns the old state.
+
+        The event log is append-only and the current state is a cache of its
+        last row. Both are written in one transaction so they cannot disagree.
+        """
+        with self.tx() as c:
+            row = c.execute(
+                "SELECT state FROM pipeline_state WHERE fingerprint = ?", (fingerprint,)
+            ).fetchone()
+            previous = row["state"] if row else None
+            c.execute(
+                "INSERT OR REPLACE INTO pipeline_state(fingerprint, state, updated_at, due_at,"
+                " note) VALUES (?,?,?,?,?)",
+                (fingerprint, state, now, due_at, note),
+            )
+            c.execute(
+                "INSERT INTO state_events(fingerprint, from_state, to_state, at, source, note)"
+                " VALUES (?,?,?,?,?,?)",
+                (fingerprint, previous, state, now, source, note),
+            )
+        return previous
+
+    def state(self, fingerprint: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM pipeline_state WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def in_state(self, state: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM pipeline_state WHERE state = ? ORDER BY updated_at DESC", (state,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def due_before(self, when: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM pipeline_state WHERE due_at IS NOT NULL AND due_at <= ?"
+            " ORDER BY due_at",
+            (when,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def state_history(self, fingerprint: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM state_events WHERE fingerprint = ? ORDER BY id", (fingerprint,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # -- the tailored document --------------------------------------------
+
+    def put_tailored(
+        self,
+        fingerprint: str,
+        *,
+        family: str,
+        language: str,
+        base_sha256: str,
+        path: str,
+        changes: str,
+        now: str,
+    ) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO tailored(fingerprint, family, language, base_sha256,"
+                " path, changes, created_at) VALUES (?,?,?,?,?,?,?)",
+                (fingerprint, family, language, base_sha256, path, changes, now),
+            )
+
+    def tailored(self, fingerprint: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM tailored WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        return dict(row) if row else None
+
     def counts(self) -> dict[str, int]:
         tables = (
             "runs",
@@ -422,6 +618,9 @@ class Store:
             "duplicate_links",
             "cv_bases",
             "labels",
+            "analyses",
+            "pipeline_state",
+            "tailored",
         )
         return {
             t: int(self.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]) for t in tables

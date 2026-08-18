@@ -20,6 +20,7 @@ EXPECTED = {
     "dedup_tiebreak": HAIKU,
     "verify_no_fabrication": HAIKU,
     "orchestrator_plan": HAIKU,
+    "reflect_anchors": HAIKU,
     "extract_requirements": SONNET,
     "fit_score": SONNET,
     "tailor_cv": SONNET,

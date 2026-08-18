@@ -2,6 +2,10 @@
 
 desk demo      run the offline skeleton end to end (no key, no network)
 desk fetch     scrape one site into the store; a dry run unless --write
+desk analyze   gates, family, requirements and a fit score over the store
+desk tailor    cut a CV from its approved base for one posting
+desk digest    the daily ranked digest; it never applies for you
+desk state     show or move where a posting stands
 desk spec      show what the search specification currently says
 desk tools     show the registered tools and their permission tiers
 desk routes    show the stage routing table
@@ -355,6 +359,36 @@ def cmd_trace(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_analyze(args: argparse.Namespace) -> int:
+    """Gates, family, requirements, score — over the postings in the store.
+
+    Imported inside the function on purpose. The analyst pulls in the model
+    layer and the gates; `desk spec` and `desk trace` should keep working in a
+    clone where nothing but the standard library is importable.
+    """
+    from .analyst.command import cmd_analyze as run_analyze
+
+    return run_analyze(args)
+
+
+def cmd_tailor(args: argparse.Namespace) -> int:
+    from .tailor.command import cmd_tailor as run_tailor
+
+    return run_tailor(args)
+
+
+def cmd_digest(args: argparse.Namespace) -> int:
+    from .manager.command import cmd_digest as run_digest
+
+    return run_digest(args)
+
+
+def cmd_state(args: argparse.Namespace) -> int:
+    from .manager.command import cmd_state as run_state
+
+    return run_state(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="desk", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -391,6 +425,39 @@ def build_parser() -> argparse.ArgumentParser:
         "--review", action="store_true", help="compare recorded labels against the gates"
     )
     label_cmd.set_defaults(func=cmd_label)
+
+    analyze = sub.add_parser("analyze", help="run the analyst over stored postings")
+    analyze.add_argument("--limit", type=int, default=20, help="postings to consider")
+    analyze.add_argument("--fingerprint", action="append", help="analyse these and nothing else")
+    analyze.add_argument("--engine", choices=ENGINES, default="replay")
+    analyze.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")
+    analyze.add_argument("--write", action="store_true", help="store the verdicts")
+    analyze.add_argument("--show", type=int, default=12, help="how many to print")
+    analyze.add_argument("--all", action="store_true", help="include already-analysed postings")
+    analyze.set_defaults(func=cmd_analyze)
+
+    tailor = sub.add_parser("tailor", help="cut a CV from its approved base for one posting")
+    tailor.add_argument("--fingerprint", required=True)
+    tailor.add_argument("--engine", choices=ENGINES, default="replay")
+    tailor.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")
+    tailor.add_argument("--write", action="store_true", help="write the document to disk")
+    tailor.add_argument("--language", choices=("he", "en"), default=None)
+    tailor.set_defaults(func=cmd_tailor)
+
+    digest = sub.add_parser("digest", help="build the daily ranked digest")
+    digest.add_argument("--limit", type=int, default=None, help="override the spec's max_items")
+    digest.add_argument("--min-score", type=float, default=None, help="override the spec's floor")
+    digest.add_argument("--send", action="store_true", help="deliver it; off by default")
+    digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
+    digest.set_defaults(func=cmd_digest)
+
+    state = sub.add_parser("state", help="show or move where a posting stands")
+    state.add_argument("--fingerprint", default=None)
+    state.add_argument("--set", dest="new_state", default=None, help="move it to this state")
+    state.add_argument("--note", default="", help="why")
+    state.add_argument("--list", dest="list_state", default=None, help="list one state")
+    state.add_argument("--due", action="store_true", help="list what a follow-up is due on")
+    state.set_defaults(func=cmd_state)
 
     sub.add_parser("spec", help="show the search specification").set_defaults(func=cmd_spec)
     sub.add_parser("tools", help="show registered tools and tiers").set_defaults(func=cmd_tools)
