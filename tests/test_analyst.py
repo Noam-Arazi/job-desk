@@ -865,3 +865,52 @@ def test_named_fingerprints_override_the_already_analysed_filter(desk_home) -> N
     # Now it has an analysis row, so the default listing would skip it.
     assert cmd_analyze(args_for()) == 1
     assert cmd_analyze(args_for("--fingerprint", fingerprint)) == 0
+
+
+def test_a_written_analysis_enters_the_pipeline_at_discovered(desk_home) -> None:
+    """The analyst reading a posting is what "discovered" means.
+
+    Nothing else in the system was putting postings into the state machine, so
+    every later state had no legal predecessor and the manager's table stayed
+    empty however many analyses were stored.
+    """
+    from desk.config import paths
+
+    store = stored(desk_home)
+    fingerprint = store.all_postings()[0]["fingerprint"]
+    store.close()
+
+    assert cmd_analyze(args_for("--write")) == 0
+
+    store = Store(paths().db)
+    state = store.state(fingerprint)
+    store.close()
+    assert state["state"] == "discovered"
+
+
+def test_re_analysing_does_not_walk_a_posting_backwards(desk_home) -> None:
+    """A posting Noam already approved must not be reset by a second pass."""
+    from datetime import datetime
+
+    from desk.config import load_spec, paths
+    from desk.manager.states import APPROVED, DISCOVERED, move
+
+    store = stored(desk_home)
+    fingerprint = store.all_postings()[0]["fingerprint"]
+    store.close()
+
+    assert cmd_analyze(args_for("--write")) == 0
+
+    store = Store(paths().db)
+    move(store, fingerprint, "shortlisted", spec=load_spec(), now=datetime(2026, 8, 18, 9))
+    move(store, fingerprint, APPROVED, spec=load_spec(), now=datetime(2026, 8, 18, 10))
+    store.close()
+
+    assert cmd_analyze(args_for("--write", "--fingerprint", fingerprint)) == 0
+
+    store = Store(paths().db)
+    state = store.state(fingerprint)
+    history = [event["to_state"] for event in store.state_history(fingerprint)]
+    store.close()
+    assert state["state"] == APPROVED
+    assert history == [DISCOVERED, "shortlisted", APPROVED]

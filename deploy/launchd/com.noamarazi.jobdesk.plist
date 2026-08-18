@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The daily digest, at 08:00, from spec/search.yaml digest.schedule.
+
+    cron: "0 8 * * *"      ->  StartCalendarInterval Hour 8, Minute 0
+    timeout_seconds: 900   ->  DESK_TIMEOUT_SECONDS, enforced by run-digest.sh
+
+  Why the timeout is not a launchd key: there isn't one. ExitTimeOut is the
+  grace period launchd allows between SIGTERM and SIGKILL when it is already
+  trying to stop the job — it does not bound how long a running job may take.
+  Nothing in launchd does. So the wall-clock limit is enforced by the wrapper
+  script, and this file's only job is to hand it the number.
+
+  Why any of this matters on this machine: with Power Nap, a scheduled job
+  wakes inside a short window while the lid is shut. An unsupervised job with
+  no timeout that hangs — a site that accepts the connection and never answers
+  is enough — stays hung indefinitely, holds the run, and KeepAlive does not
+  rescue it, because from launchd's point of view the job never exited.
+
+  Note there is no send flag here. Telegram is off in the spec, and asking to
+  send into a disabled channel is a hard error by design. Adding the flag is
+  the second half of turning delivery on; see docs/session-7.md.
+
+  This file is not installed by anything. Copying it into ~/Library/LaunchAgents
+  is a deliberate act by a human, and so is removing it.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.noamarazi.jobdesk</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/noamarazi/Desktop/job-desk/deploy/launchd/run-digest.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/noamarazi/Desktop/job-desk</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DESK_HOME</key>
+        <string>/Users/noamarazi/Desktop/job-desk</string>
+        <!-- The explicit wall-clock ceiling. The wrapper refuses to run without it. -->
+        <key>DESK_TIMEOUT_SECONDS</key>
+        <string>900</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Grace period after launchd asks the job to stop. Not a run-time limit. -->
+    <key>ExitTimeOut</key>
+    <integer>900</integer>
+
+    <!-- A digest is not a daemon. It runs, it prints, it exits. -->
+    <key>RunAtLoad</key>
+    <false/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/noamarazi/Desktop/job-desk/runs/digest.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/noamarazi/Desktop/job-desk/runs/digest.err.log</string>
+</dict>
+</plist>

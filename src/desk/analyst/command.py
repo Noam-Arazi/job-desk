@@ -72,6 +72,26 @@ def _summary(analyst: Analyst) -> str:
     return counted
 
 
+def _mark_discovered(
+    store: Store, analysis: Analysis, *, spec: Mapping[str, Any], now: datetime
+) -> bool:
+    """Put a newly analysed posting at the entry point of the pipeline.
+
+    Nothing else in the system was moving postings into `discovered`, so the
+    state machine sat empty and every later state had no legal predecessor to
+    come from. This is bookkeeping and not a judgment: the analyst having read a
+    posting is exactly what "discovered" means, and a posting that already has a
+    state is left where it is — re-analysing an item Noam already approved must
+    not walk it backwards.
+    """
+    from ..manager.states import DISCOVERED, SYSTEM, current, move
+
+    if current(store, analysis.fingerprint) is not None:
+        return False
+    move(store, analysis.fingerprint, DISCOVERED, spec=spec, now=now, source=SYSTEM)
+    return True
+
+
 def _store_analysis(store: Store, analysis: Analysis, *, now: str) -> None:
     store.put_analysis(
         analysis.fingerprint,
@@ -158,10 +178,13 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         return 0 if not errors and not halted else 1
 
     stamp = now.isoformat(timespec="seconds")
+    discovered = 0
     for analysis in analyses:
         _store_analysis(store, analysis, now=stamp)
+        before = _mark_discovered(store, analysis, spec=spec, now=now)
+        discovered += int(before)
     store.close()
     ctx.store.close()
     print("")
-    print(f"stored   {len(analyses)} analyses")
+    print(f"stored   {len(analyses)} analyses, {discovered} entered the pipeline as discovered")
     return 0 if not errors and not halted else 1
