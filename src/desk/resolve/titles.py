@@ -21,7 +21,14 @@ import re
 
 # "דרוש /ה", "איש.ת", "מנהל /ת" — the same noun written for both genders.
 # The suffix carries no meaning for matching and varies freely between posters.
-_GENDER_SLASH = re.compile(r"\s*/\s*(?:ה|ת|ית|ות|ים|ה\b)")
+#
+# The lookahead is the whole correctness of this pattern. A slash in Hebrew also
+# separates two alternatives — "מדעי המחשב/הנדסת תוכנה", "סטטיסטיקה/ מתמטיקה" —
+# and without a right-hand boundary the leading letter of the second alternative
+# is eaten as if it were a gender suffix, welding two words into one that exists
+# in no other posting. A suffix ends the word; anything followed by another
+# Hebrew letter was never a suffix.
+_GENDER_SLASH = re.compile(r"\s*/\s*(?:ית|ות|ים|ה|ת)(?![א-ת])")
 _GENDER_DOT = re.compile(r"(?<=[א-ת])\.(?:ת|ית|ות|ים)\b")
 
 # The verb that separates an employer lead-in from the role on Israeli boards.

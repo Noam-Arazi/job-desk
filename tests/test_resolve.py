@@ -49,6 +49,26 @@ def test_dual_gender_spellings_collapse_onto_one_stem() -> None:
     assert strip_gender("נציגי /ות שירות") == "נציגי שירות"
 
 
+def test_a_slash_between_two_words_is_not_a_gender_suffix() -> None:
+    """Hebrew uses the same slash to separate alternatives. Without a right-hand
+    boundary the leading letter of the second alternative is eaten and the two
+    words weld into one that exists in no other posting: "מדעי המחשב/הנדסת
+    תוכנה" became "המחשבנדסת תוכנה". Found by the gates session, 2026-08-18."""
+    assert strip_gender("תואר ראשון במדעי המחשב/הנדסת תוכנה") == (
+        "תואר ראשון במדעי המחשב/הנדסת תוכנה"
+    )
+    assert strip_gender("תואר בסטטיסטיקה/ מתמטיקה/ תואר טכנולוגי") == (
+        "תואר בסטטיסטיקה/ מתמטיקה/ תואר טכנולוגי"
+    )
+    assert strip_gender("מנהל /תפעול") == "מנהל /תפעול"
+
+
+def test_a_real_gender_suffix_still_goes() -> None:
+    """The boundary must not cost the case the pattern exists for."""
+    assert strip_gender("דרוש /ה אנליסט /ית") == "דרוש אנליסט"
+    assert strip_gender("מנהל /ית פרויקטים") == "מנהל פרויקטים"
+
+
 def test_an_agency_blurb_after_the_role_is_cut() -> None:
     """GotFriends shape: the role leads, the unnamed client follows."""
     assert role_core("Senior BI Developer בחברת סטארט-אפ בתחום ה-Analytics") == (
