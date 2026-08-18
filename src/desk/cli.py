@@ -6,6 +6,7 @@ desk analyze   gates, family, requirements and a fit score over the store
 desk tailor    cut a CV from its approved base for one posting
 desk digest    the daily ranked digest; it never applies for you
 desk state     show or move where a posting stands
+desk propose   draft a short proposal for one freelance project
 desk evals     score the system against the gold set
 desk spec      show what the search specification currently says
 desk tools     show the registered tools and their permission tiers
@@ -384,6 +385,12 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return run_digest(args)
 
 
+def cmd_propose(args: argparse.Namespace) -> int:
+    from .freelance.command import cmd_propose as run_propose
+
+    return run_propose(args)
+
+
 def cmd_evals(args: argparse.Namespace) -> int:
     from .evals.command import cmd_evals as run_evals
 
@@ -457,6 +464,13 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--send", action="store_true", help="deliver it; off by default")
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)
+
+    propose = sub.add_parser("propose", help="draft a proposal for one freelance project")
+    propose.add_argument("--fingerprint", required=True)
+    propose.add_argument("--engine", choices=ENGINES, default="replay")
+    propose.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")
+    propose.add_argument("--write", action="store_true", help="write the proposal to disk")
+    propose.set_defaults(func=cmd_propose)
 
     evals = sub.add_parser("evals", help="score the system against the gold set")
     evals.add_argument("--suite", default="all", help="which suite to run")
