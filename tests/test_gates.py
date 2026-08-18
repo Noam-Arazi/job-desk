@@ -125,16 +125,58 @@ def test_a_location_naming_nothing_recognisable_does_not_block(spec) -> None:
     assert not result.blocks
 
 
+def test_a_town_rejected_by_name_blocks_even_inside_an_accepted_region(spec) -> None:
+    """Noam's call, 18.08.2026, on the 83 strings the gate could not place: only
+    רמת השרון stays. Several of the rest sit inside regions the spec accepts, so
+    the rejection has to override region membership or it does nothing."""
+    result = geography.check(spec=spec, location="בת ים")
+
+    assert result.verdict is Verdict.BLOCK
+    assert "rejects by name" in result.reason
+
+
+def test_the_one_town_he_kept_is_placed(spec) -> None:
+    result = geography.check(spec=spec, location="רמת השרון")
+
+    assert result.verdict is Verdict.PASS
+    assert "sharon" in result.details["accepted_regions"]
+
+
+def test_a_rejected_town_beside_an_accepted_city_still_passes(spec) -> None:
+    """Any accepted city is enough. That rule did not change, and this is the
+    shape 22 of the rejected rows actually arrive in."""
+    result = geography.check(spec=spec, location="מספר מקומות לוד תל אביב רמלה")
+
+    assert result.verdict is Verdict.PASS
+
+
+def test_a_city_carrying_a_hebrew_prefix_is_still_that_city(spec) -> None:
+    """Hebrew glues its prepositions onto the next word: "ברעננה" is where the
+    job is. A boundary rule that forbids any letter in front reads it as a
+    different word and places the posting nowhere."""
+    for phrase in ("המשרד ברעננה", "העבודה בחיפה", "צוות שיושב בתל אביב"):
+        assert geography.check(spec=spec, location=phrase).verdict is Verdict.PASS
+
+
+def test_a_three_letter_town_is_not_matched_inside_a_longer_word(spec) -> None:
+    """The gate falls back to reading the body, and "לוד" is three letters. A
+    chance fragment there would place a job in a town nobody mentioned."""
+    result = geography.check(spec=spec, location="", body="הצוות עובד בסביבה מבוזרת ומגוונת")
+
+    assert result.verdict is Verdict.UNKNOWN
+
+
 def test_the_missing_city_report_does_not_count_working_from_home(spec) -> None:
     """It is not a town the spec forgot, it is a posting the remote rule already
     handles — and it was the most frequent entry in this report until it was
     taken out. A list of missing data that is mostly not missing does not get
-    read."""
+    read. A town the spec rejects by name is not missing either: it was decided,
+    and what is left is only what nobody has ruled on."""
     from desk.gates.geography import unknown_cities
 
-    missing = unknown_cities(spec, ["עבודה מהבית", "חיפה", "כפר רופין"])
+    missing = unknown_cities(spec, ["עבודה מהבית", "חיפה", "לוד", "יישוב שאיש לא רשם"])
 
-    assert missing == ["כפר רופין"]
+    assert missing == ["יישוב שאיש לא רשם"]
 
 
 def test_every_region_the_spec_names_has_cities(spec) -> None:

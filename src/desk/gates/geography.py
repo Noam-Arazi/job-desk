@@ -42,17 +42,28 @@ _REMOTE_MARKERS = (
 _ISRAELI_BOARDS = ("alljobs", "drushim", "gotfriends", "jobify", "xplace", "linkedin")
 
 
+# Towns rejected one by one rather than by the region they sit in. They need a
+# region label to travel through the same machinery as the rest, and this is it.
+REJECTED = "rejected_by_name"
+
+
 def city_index(spec: Mapping[str, Any]) -> dict[str, str]:
     """Every city the spec names, mapped to its region.
 
     Empty when the spec states no city data, which is a real state and not an
     error: this gate then reports `unknown` rather than inventing a geography.
+
+    `exclude_cities` joins the same index under a reserved label. A town on that
+    list is rejected wherever it sits, including inside an accepted region —
+    which is the whole reason the list exists rather than a region edit.
     """
-    cities = (spec.get("geography") or {}).get("cities") or {}
+    geography = spec.get("geography") or {}
     index: dict[str, str] = {}
-    for region, names in cities.items():
+    for region, names in (geography.get("cities") or {}).items():
         for name in names or ():
             index[readable(str(name))] = str(region)
+    for name in geography.get("exclude_cities") or ():
+        index[readable(str(name))] = REJECTED
     return index
 
 
@@ -68,12 +79,44 @@ def _found_cities(text: str, index: Mapping[str, str]) -> list[tuple[str, str, i
         start = text.find(city)
         while start != -1:
             end = start + len(city)
-            if not any(s <= start and end <= e for s, e in consumed):
+            if not _inside_a_word(text, start, end) and not any(
+                s <= start and end <= e for s, e in consumed
+            ):
                 consumed.append((start, end))
                 found.append((city, index[city], start))
                 break
             start = text.find(city, end)
     return sorted(found, key=lambda f: f[2])
+
+
+# Hebrew glues its prepositions and its definite article onto the front of the
+# next word, so "ברעננה" is where the job is and not a different word. One such
+# letter is allowed in front of a city name; two Hebrew letters mean the match
+# is a fragment of something else.
+_PREFIXES = "בלמהוש כ".replace(" ", "")
+
+
+def _inside_a_word(text: str, start: int, end: int) -> bool:
+    """Whether the match is a fragment of a longer Hebrew word.
+
+    Short names make this necessary: "לוד" is three letters and appears inside
+    ordinary words, and the gate falls back to reading the body, where a chance
+    fragment would place a job in a town nobody mentioned.
+    """
+    after = text[end] if end < len(text) else " "
+    if _is_hebrew_letter(after):
+        return True
+    before = text[start - 1] if start > 0 else " "
+    if not _is_hebrew_letter(before):
+        return False
+    if before not in _PREFIXES:
+        return True
+    two_back = text[start - 2] if start > 1 else " "
+    return _is_hebrew_letter(two_back)
+
+
+def _is_hebrew_letter(char: str) -> bool:
+    return "\u05d0" <= char <= "\u05ea"
 
 
 def check(
@@ -86,7 +129,7 @@ def check(
 ) -> GateResult:
     geography = spec.get("geography") or {}
     accepted = {str(r) for r in geography.get("regions") or ()}
-    excluded = {str(r) for r in geography.get("exclude_regions") or ()}
+    excluded = {str(r) for r in geography.get("exclude_regions") or ()} | {REJECTED}
     index = city_index(spec)
 
     if not index:
@@ -126,11 +169,16 @@ def check(
 
     if in_excluded:
         city, region, at = in_excluded[0]
-        named = ", ".join(sorted({h[1] for h in in_excluded}))
+        regions = sorted({h[1] for h in in_excluded})
+        if regions == [REJECTED]:
+            why = "every place named is one the spec rejects by name"
+        else:
+            named = ", ".join(r for r in regions if r != REJECTED)
+            why = f"every city named is in an excluded region ({named})"
         return GateResult(
             GATE,
             Verdict.BLOCK,
-            reason=f"every city named is in an excluded region ({named})",
+            reason=why,
             evidence=quote(where, at, at + len(city)),
             details={
                 "read_from": read_from,
