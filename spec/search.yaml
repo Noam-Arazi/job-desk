@@ -451,3 +451,56 @@ digest:
   schedule:
     cron: "0 8 * * *"
     timeout_seconds: 900           # explicit — Power Nap hangs untimed jobs
+
+# ---------------------------------------------------------------------------
+# analyst — session 5
+# The knobs the analyst reads. They live here for the same reason every other
+# threshold does: changing what counts as a fit is an edit to this file, never
+# a code change.
+# ---------------------------------------------------------------------------
+analyst:
+
+  family:
+    min_confidence: 0.5
+    # No family is a real answer and the cheap one. A microbiologist matches
+    # nothing here, and there is no reason to spend a judgment-tier call
+    # scoring a fit nobody will read.
+    on_no_family: stop
+
+  reflect:
+    # The evaluator half of the extraction loop. A requirement whose quoted
+    # span is not in the posting is not a weak requirement, it is an invented
+    # one, and it is dropped rather than argued with.
+    max_rounds: 2
+    drop_unanchored: true
+    normalize_whitespace: true
+
+  score:
+    channel:
+      # Advice, never an action. The system does not apply.
+      skip_below: 0.6        # the digest floor: below it nothing is recommended
+      person_min: 0.8        # a direct approach is worth it only on a strong
+                             # fit, and only where the employer is named at all
+
+# ---------------------------------------------------------------------------
+# manager — session 7
+# ---------------------------------------------------------------------------
+manager:
+
+  states:
+    - discovered
+    - shortlisted
+    - approved
+    - applied
+    - ack
+    - interview
+    - offer
+    - closed
+
+  follow_up_days: 7          # no answer within this window raises a nudge
+  stale_days: 21             # untouched this long and it closes itself
+
+  delivery:
+    telegram: false          # off until Noam turns it on; stdout until then
+    auto_apply: never        # stated here so the answer is in the spec, not
+                             # only in the code

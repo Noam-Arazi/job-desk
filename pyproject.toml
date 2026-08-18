@@ -16,6 +16,10 @@ api = ["anthropic>=0.69"]
 # `browser` adds Playwright, and only the attached-browser site needs it.
 fetch = ["scrapling>=0.4"]
 browser = ["scrapling[fetchers]>=0.4"]
+# The six approved bases are .docx and the output is .docx — Noam edits it in
+# Word after, so a PDF would be a dead end. There is no Word and no LibreOffice
+# on this machine, which is also why the one-page check stays human.
+docx = ["python-docx>=1.1"]
 
 [project.scripts]
 desk = "desk.cli:main"
@@ -28,6 +32,7 @@ dev = [
     # The parser tests run against saved fixtures, so the parsing half is
     # always installed for development. Playwright still is not.
     "scrapling>=0.4",
+    "python-docx>=1.1",
 ]
 
 [build-system]
