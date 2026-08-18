@@ -1,0 +1,23 @@
+{
+  "_readme": [
+    "Hand-labelled duplicate clusters. Extended by a human, never generated.",
+    "A cluster is one opening that was posted more than once. Every fingerprint",
+    "listed under `members` is the same seat. Two seats on one team are two",
+    "clusters, even when the agency describes them with the same paragraph.",
+    "",
+    "`distinct_pairs` is the other half and it matters just as much: pairs a",
+    "human opened, compared, and decided are different. Without them precision",
+    "has no honest denominator, because every unlabelled pair is unjudgeable.",
+    "",
+    "Fingerprints come from the live store and are not secret, but the posting",
+    "text is. Record fingerprints and a short human note, never the body.",
+    "",
+    "To add one:",
+    "  uv run desk resolve --uncertain      # see what the arithmetic could not settle",
+    "  uv run desk evals --suite dedup      # re-score after editing this file"
+  ],
+  "labelled_at": "",
+  "labelled_by": "",
+  "clusters": [],
+  "distinct_pairs": []
+}
