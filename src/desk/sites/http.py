@@ -26,7 +26,9 @@ def _scrapling() -> Any:
     try:
         from scrapling.fetchers import Fetcher
     except ImportError as exc:  # pragma: no cover - exercised by hand, not in CI
-        raise FetchError("the fetch extra is not installed. `uv sync --extra fetch`") from exc
+        raise FetchError(
+            "the fetch extra is not installed. `uv sync --extra fetch --dev`"
+        ) from exc
     return Fetcher
 
 
@@ -35,7 +37,9 @@ def selector(html: str) -> Any:
     try:
         from scrapling import Selector
     except ImportError as exc:  # pragma: no cover
-        raise FetchError("the fetch extra is not installed. `uv sync --extra fetch`") from exc
+        raise FetchError(
+            "the fetch extra is not installed. `uv sync --extra fetch --dev`"
+        ) from exc
     return Selector(html)
 
 

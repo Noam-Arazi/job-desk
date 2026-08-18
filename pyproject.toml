@@ -12,9 +12,18 @@ dependencies = [
 # The API path exists so the repo is not a Claude Code script. Not needed to run the demo.
 api = ["anthropic>=0.69"]
 # Kept optional so the offline replay path stays light — see session 4.
-# Two tiers on purpose. `fetch` is HTTP plus adaptive parsing and is small.
-# `browser` adds Playwright, and only the attached-browser site needs it.
-fetch = ["scrapling>=0.4"]
+#
+# `fetch` was declared as bare `scrapling` until 2026-08-18, on the assumption
+# that HTTP fetching and browser driving were separable there. They are not:
+# importing `scrapling.fetchers` pulls curl_cffi and playwright at module load
+# even when only the plain HTTP fetcher is wanted, so a `--extra fetch` install
+# raised ImportError at the first request and the error message sent the reader
+# back to the flag that had just failed them.
+#
+# The two tiers still mean something. `fetch` installs the packages; `browser`
+# is the same set plus the browser binaries, which arrive through
+# `playwright install chromium` and not through pip at all.
+fetch = ["scrapling[fetchers]>=0.4"]
 browser = ["scrapling[fetchers]>=0.4"]
 # The six approved bases are .docx and the output is .docx — Noam edits it in
 # Word after, so a PDF would be a dead end. There is no Word and no LibreOffice
