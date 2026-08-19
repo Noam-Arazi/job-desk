@@ -131,3 +131,23 @@ def test_a_label_survives_between_runs(tmp_path) -> None:
     with Store(tmp_path / "desk.sqlite") as reopened:
         assert reopened.labels()[posting.fingerprint]["label"] == gold.HIGH
         assert reopened.is_labelled(posting.fingerprint)
+
+
+def test_one_label_counts_once_however_many_boards_carry_the_role() -> None:
+    """The sampler dedupes by fingerprint and the scorer did not.
+
+    A role on two boards counted its single label twice, inflating the
+    denominator of the only number this file produces — on a corpus where forty
+    clusters span sites.
+    """
+    from desk.label import HIGH, agreement
+
+    rows = [
+        {"fingerprint": "fp", "site": "alljobs", "title": "אנליסט/ית", "company": "סונול",
+         "location": "נתניה", "body": "", "posted_at": "2026-08-18T09:00:00"},
+        {"fingerprint": "fp", "site": "drushim", "title": "אנליסט/ית", "company": "סונול",
+         "location": "נתניה", "body": "", "posted_at": "2026-08-18T09:00:00"},
+    ]
+    labels = {"fp": {"label": HIGH, "stratum": "survived"}}
+    report = agreement(rows, labels, spec=load_spec(), now=datetime(2026, 8, 18, 9))
+    assert report.labelled == 1

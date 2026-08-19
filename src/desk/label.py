@@ -88,6 +88,8 @@ def sample(
     blocked_share: int = DEFAULT_BLOCKED_SHARE,
     seed: int = 0,
     exclude: frozenset[str] = frozenset(),
+    first_seen: Any = None,
+    has_applied: Any = None,
 ) -> list[Item]:
     """A stratified, reproducible sample of postings to label.
 
@@ -103,7 +105,13 @@ def sample(
         if not fingerprint or fingerprint in seen or fingerprint in exclude:
             continue
         seen.add(fingerprint)
-        report = run_gates(Candidate.from_row(row), spec=spec, now=now)
+        report = run_gates(
+            Candidate.from_row(row),
+            spec=spec,
+            now=now,
+            first_seen=first_seen,
+            has_applied=has_applied,
+        )
         (blocked if report.blocked else survived).append(row)
 
     rng = random.Random(seed)
@@ -177,6 +185,8 @@ def agreement(
     *,
     spec: Mapping[str, Any],
     now: datetime,
+    first_seen: Any = None,
+    has_applied: Any = None,
 ) -> Agreement:
     """Compare the gates against the labels, once the labels are already fixed.
 
@@ -189,13 +199,29 @@ def agreement(
         ("bb", "bw", "pb", "pw"), 0
     )  # gate blocked/passed × human irrelevant/wanted
     n = 0
+    # One label is one judgement, however many boards carry the posting. The
+    # sampler dedupes by fingerprint and this did not, so a role sitting on two
+    # boards counted its single label twice — inflating the denominator of the
+    # only number in this file, on a corpus where forty clusters span sites.
+    counted: set[str] = set()
     for row in rows:
         fingerprint = row.get("fingerprint") or ""
         label = labels.get(fingerprint)
-        if not label:
+        if not label or fingerprint in counted:
             continue
+        counted.add(fingerprint)
         n += 1
-        blocked = run_gates(Candidate.from_row(row), spec=spec, now=now).blocked
+        # The same chain the daily run binds. Left unbound, freshness has no
+        # store to ask how old a role really is and the applied gate can never
+        # fire, so the gold set would be measuring a differently-configured
+        # chain than the one it is meant to be scoring.
+        blocked = run_gates(
+            Candidate.from_row(row),
+            spec=spec,
+            now=now,
+            first_seen=first_seen,
+            has_applied=has_applied,
+        ).blocked
         wanted = label["label"] in (HIGH, MEDIUM)
         key = ("b" if blocked else "p") + ("w" if wanted else "b")
         counters[key] += 1

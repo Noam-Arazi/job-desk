@@ -230,6 +230,7 @@ def cmd_label(args: argparse.Namespace) -> int:
     from datetime import datetime
 
     from . import label as gold
+    from .gates.chain import store_first_seen
 
     store = Store(paths().ensure().db)
     rows = store.all_postings()
@@ -243,7 +244,14 @@ def cmd_label(args: argparse.Namespace) -> int:
     existing = store.labels()
 
     if args.review:
-        report = gold.agreement(rows, existing, spec=spec, now=now)
+        report = gold.agreement(
+            rows,
+            existing,
+            spec=spec,
+            now=now,
+            first_seen=store_first_seen(store),
+            has_applied=store.has_applied,
+        )
         if not report.labelled:
             print("nothing labelled yet; run `desk label` first")
             store.close()
@@ -264,6 +272,8 @@ def cmd_label(args: argparse.Namespace) -> int:
         size=args.count,
         seed=args.seed,
         exclude=frozenset(existing),
+        first_seen=store_first_seen(store),
+        has_applied=store.has_applied,
     )
     if not items:
         print(f"nothing left to label; {len(existing)} already recorded")
