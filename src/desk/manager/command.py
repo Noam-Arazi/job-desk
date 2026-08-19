@@ -4,13 +4,29 @@ Both return an exit code and print nothing that the digest object does not
 already contain, so that what Noam reads on the terminal and what a scheduled
 run writes to a log are the same text.
 
-`desk digest` sweeps the stale items closed before it builds. That is a write
-inside what otherwise reads like a read-only command, and it is deliberate: the
-daily run is the only heartbeat this system has, so it is the only moment at
-which "untouched for three weeks" can become "closed". The alternative is a
-resident process, which on a laptop that sleeps is a process that is not
-running. Every close is recorded as a `system` event and appears in the digest
-it was swept by, so it is never silent.
+`desk digest` sweeps the stale items closed. That is a write inside what
+otherwise reads like a read-only command, and it is deliberate: the daily run is
+the only heartbeat this system has, so it is the only moment at which "untouched
+for three weeks" can become "closed". The alternative is a resident process,
+which on a laptop that sleeps is a process that is not running. Every close is
+recorded as a `system` event and appears in the digest it was swept by, so it is
+never silent.
+
+The order of those steps is the whole guarantee, and it used to be the wrong way
+round. The sweep committed its closes first, then the digest was rendered and
+sent; if the send raised, the command returned 1 with the closes already
+written, and tomorrow's sweep found those rows already `closed` and returned
+nothing — so an auto-close that failed to deliver was never reported to a human
+in any digest, ever. It now finds what is stale, names it in the digest,
+delivers, and writes only after the delivery succeeded. A failed send therefore
+loses nothing: the same rows are still stale tomorrow and get reported again.
+The alternative — keeping the sweep first and persisting an "unreported closes"
+list — needs a second place where pipeline truth lives, and the store's schema
+is not this session's to change.
+
+Ordering the write after the send is also why `build` is told what is closing:
+an item that the digest reports as closed must not also appear in the same
+digest as a candidate or as a follow-up to chase.
 
 `desk state --set` records a human decision and does nothing else. Approving is
 a fact about what Noam decided, not an instruction to a machine — the command
@@ -48,16 +64,18 @@ def cmd_digest(args: argparse.Namespace) -> int:
     now = datetime.now()
     store = Store(paths().ensure().db)
     try:
-        closed = timers.sweep(store, now=now, spec=spec)
+        # Found, reported, delivered, and only then written. See the note above.
+        closing = timers.pending(store, now=now, spec=spec)
         today = digest_module.build(
             store,
             now=now,
             spec=spec,
             limit=args.limit,
             min_score=args.min_score,
-            closed=closed,
+            closed=closing,
         )
         sink.send(render.render(today, args.format))
+        timers.close(store, closing, now=now, spec=spec)
     except delivery.DeliveryError as error:
         print(str(error), file=sys.stderr)
         return 1

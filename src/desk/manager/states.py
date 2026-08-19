@@ -5,6 +5,10 @@ event log, written in one transaction so they cannot disagree. Nothing here
 stores anything of its own. What this module owns is the one thing the store
 deliberately does not — the rules.
 
+One write beyond the state row, and it is deliberate: a move to `applied` also
+records the store's applied blocklist, because those are two records of one
+fact and only one of them was ever being written. See `move`.
+
 Three properties, each of which prevents a specific mistake:
 
     the transitions are data, derived from the order the spec lists the states
@@ -72,6 +76,15 @@ class StateStore(Protocol):
     ) -> str | None: ...
 
     def state(self, fingerprint: str) -> dict[str, Any] | None: ...
+
+    def mark_applied(
+        self,
+        fingerprint: str,
+        *,
+        now: str,
+        channel: str = ...,
+        cv_path: str = ...,
+    ) -> None: ...
 
 
 class IllegalTransition(ValueError):
@@ -198,10 +211,26 @@ def move(
     `due_at` is passed in rather than computed here. The follow-up clock is the
     business of timers.py, and keeping it out of this function is what lets the
     rules be tested without a calendar. `command.py` composes the two.
+
+    Moving to `applied` also writes the store's applied blocklist, and that one
+    line is the difference between two doors and one. The digest suppresses a
+    posting either because the blocklist holds it or because the pipeline moved
+    past `applied`, and the blocklist is what the gates and `unseen_postings`
+    read too — but nothing in `src/desk` ever wrote to it. `desk state --set
+    applied` wrote only the pipeline row, so `has_applied` was False for every
+    posting in production and the only test that covered it passed by calling
+    `mark_applied` itself. The insert is `INSERT OR IGNORE`, so a re-recorded
+    application is a no-op rather than a second row.
+
+    This adds no way for anything to *become* applied on its own. The only
+    caller that reaches `applied` is `desk state --set applied`, typed by Noam;
+    the sweep only ever moves things to `closed`.
     """
     from_state = current(store, fingerprint)
     if not allows(spec, from_state, to_state):
         raise IllegalTransition(fingerprint, from_state, to_state)
     at = stamp(now)
     store.set_state(fingerprint, to_state, now=at, due_at=due_at, note=note, source=source)
+    if to_state == APPLIED:
+        store.mark_applied(fingerprint, now=at)
     return Move(fingerprint, from_state, to_state, at, due_at=due_at, note=note)

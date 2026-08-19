@@ -181,6 +181,12 @@ def build(
     `limit` and `min_score` override the spec for one run — that is what the
     CLI flags are for, and an override is a deliberate act at a keyboard. When
     they are None the spec decides, which is the case the scheduled run takes.
+
+    `closed` is what today's sweep is closing. It is passed in rather than read,
+    because the command commits those closes only after this digest has been
+    delivered — see `timers.close`. They are named in the digest and suppressed
+    from it in the same breath: an item reported as closed must not also be
+    offered as a candidate, nor chased in the follow-up list.
     """
     settings = spec["digest"]
     ceiling = settings["max_items"] if limit is None else limit
@@ -191,7 +197,8 @@ def build(
 
     candidates: list[Item] = []
     seen: set[str] = set()
-    suppressed = {"applied": 0, "later_state": 0, "blocked": 0, "duplicate": 0}
+    closing = set(closed)
+    suppressed = {"applied": 0, "later_state": 0, "blocked": 0, "duplicate": 0, "closed": 0}
 
     for row in store.analyses(min_score=float(floor)):
         analysis = Analysis.from_json(str(row["payload"]))
@@ -199,18 +206,41 @@ def build(
         if analysis.blocked:
             suppressed["blocked"] += 1
             continue
-        if store.has_applied(fingerprint):
-            suppressed["applied"] += 1
-            continue
-        if states.at_or_after(spec, states.current(store, fingerprint), APPLIED):
-            suppressed["later_state"] += 1
-            continue
 
+        # The cluster is computed and remembered before any suppression, and
+        # every suppression question is asked of the whole cluster. Both halves
+        # matter, and each one on its own is a bug that was there:
+        #
+        #   seeding `seen` after the `continue`s meant an applied posting never
+        #   entered the dedupe set, so its merged twin sailed through the next
+        #   morning as a fresh job — the same job Noam had already applied to,
+        #   under a different fingerprint, on a different board.
+        #
+        #   asking the state machine about one fingerprint meant an interview
+        #   arranged through the board that happened to be the *other* member
+        #   of the cluster suppressed nothing at all. One cluster is one job,
+        #   so one member having moved on is the job having moved on.
+        #
+        # `has_applied` is asked once and not per member: the store already
+        # answers it for the whole cluster. The state row has no cluster-aware
+        # reader, so that half is asked here.
         cluster = _cluster(store, fingerprint)
         already = cluster & seen
         seen |= cluster
         if already:
             suppressed["duplicate"] += 1
+            continue
+        if cluster & closing:
+            suppressed["closed"] += 1
+            continue
+        if store.has_applied(fingerprint):
+            suppressed["applied"] += 1
+            continue
+        if any(
+            states.at_or_after(spec, states.current(store, member), APPLIED)
+            for member in sorted(cluster)
+        ):
+            suppressed["later_state"] += 1
             continue
 
         candidates.append(_item(store, analysis, cluster))
@@ -219,7 +249,7 @@ def build(
     return Digest(
         date=now.date().isoformat(),
         items=tuple(ranked[: max(0, int(ceiling))]),
-        follow_ups=tuple(timers.due(store, now=now)),
+        follow_ups=tuple(n for n in timers.due(store, now=now) if n.fingerprint not in closing),
         closed=tuple(closed),
         min_score=float(floor),
         max_items=int(ceiling),

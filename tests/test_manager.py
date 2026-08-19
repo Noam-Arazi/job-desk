@@ -39,7 +39,7 @@ from pathlib import Path
 import pytest
 
 from desk.analyst.types import BUTTON, PERSON, Analysis, Family, Fit
-from desk.config import REPO_ROOT, load_spec
+from desk.config import REPO_ROOT, load_spec, paths
 from desk.manager import delivery, render, states, timers
 from desk.manager import digest as digest_module
 from desk.store import Posting, Store
@@ -275,6 +275,38 @@ def test_answering_clears_the_nudge(spec, store) -> None:
     assert timers.due(store, now=NOW + timedelta(days=90)) == []
 
 
+def test_the_sweep_never_closes_a_live_interview_or_an_offer(spec, store) -> None:
+    """The sweep stops at `applied`, and the reason is that `closed` is terminal.
+
+    An interview arranged on day 0 and not touched again was closed by the
+    calendar on day 21 — and there was no way to say "still interviewing",
+    because `interview -> interview` is an illegal move and nothing else
+    refreshes `updated_at`. The offer that arrived on day 22 could then never
+    be recorded at all: `closed` has an empty transition set.
+    """
+    for fingerprint, state in (
+        ("fp_ack", "ack"),
+        ("fp_interview", "interview"),
+        ("fp_offer", "offer"),
+        ("fp_shortlisted", "shortlisted"),
+        ("fp_applied", states.APPLIED),
+    ):
+        states.move(store, fingerprint, state, spec=spec, now=NOW)
+
+    later = NOW + timedelta(days=spec["manager"]["stale_days"] * 2)
+    assert set(timers.sweep(store, now=later, spec=spec)) == {"fp_shortlisted", "fp_applied"}
+
+    # Silence before an answer is an answer, so those two closed. A live thread
+    # with a person on the other end is not the calendar's to end.
+    assert states.current(store, "fp_ack") == "ack"
+    assert states.current(store, "fp_interview") == "interview"
+    assert states.current(store, "fp_offer") == "offer"
+
+    # And the offer that arrives three weeks into an interview is recordable.
+    states.move(store, "fp_interview", "offer", spec=spec, now=later)
+    assert states.current(store, "fp_interview") == "offer"
+
+
 def test_an_untouched_item_closes_itself_after_the_spec_s_window(spec, store) -> None:
     states.move(store, "fp1", "shortlisted", spec=spec, now=NOW)
     stale_after = timedelta(days=spec["manager"]["stale_days"])
@@ -355,16 +387,114 @@ def test_the_floor_and_the_ceiling_come_from_the_spec(spec, store) -> None:
     assert all(i.score >= 0.65 for i in build(store, spec).items)
 
 
+def test_recording_an_application_writes_the_store_s_blocklist_too(spec, store) -> None:
+    """Two doors, and one of them was walled up.
+
+    Nothing in `src/desk` called `mark_applied`, so `has_applied` was False for
+    every posting in production and the blocklist the gates and
+    `unseen_postings` read was permanently empty. The state move is what opens
+    it, and only the move to `applied` does — an interview arranged by phone is
+    not an application anybody made, and that is why the second door exists.
+    """
+    states.move(store, "fp1", states.APPLIED, spec=spec, now=NOW)
+    assert store.has_applied("fp1") is True
+
+    states.move(store, "fp2", "interview", spec=spec, now=NOW)
+    assert store.has_applied("fp2") is False
+
+
 def test_an_already_applied_posting_never_reappears(spec, store) -> None:
-    """The required case, through the store's blocklist."""
+    """The required case, through the store's blocklist.
+
+    The application is recorded the way Noam records one — a state move — and
+    not by the test writing the blocklist itself, which is what let this pass
+    while the only production writer of that blocklist did not exist. The
+    blocklist is what suppresses here: it is asked before the state is.
+    """
     analysed(store, "fp1", score=0.9)
     analysed(store, "fp2", score=0.8)
     assert [i.fingerprint for i in build(store, spec).items] == ["fp1", "fp2"]
 
-    store.mark_applied("fp1", now=stamp(NOW))
+    states.move(store, "fp1", states.APPLIED, spec=spec, now=NOW)
+    assert store.has_applied("fp1") is True
+
     today = build(store, spec)
     assert [i.fingerprint for i in today.items] == ["fp2"]
     assert today.suppressed["applied"] == 1
+
+
+def test_applying_through_one_board_suppresses_the_merged_twin(spec, store) -> None:
+    """One cluster is one job, so one member applied to is the job applied to.
+
+    The cluster is now unioned into the dedupe set before any suppression can
+    `continue` past it. Seeding it afterwards meant an applied posting never
+    entered the set at all, and its twin on the other board came back the next
+    morning as a fresh job.
+    """
+    analysed(store, "fpA", score=0.9, site="alljobs")
+    analysed(store, "fpB", score=0.85, site="drushim")
+    store.record_link(
+        "fpA", "fpB", score=0.95, band="duplicate", method="arithmetic", now=stamp(NOW)
+    )
+    states.move(store, "fpA", states.APPLIED, spec=spec, now=NOW)
+
+    today = build(store, spec)
+    assert today.items == ()
+    assert today.suppressed["applied"] == 1
+    assert today.suppressed["duplicate"] == 1
+
+
+def test_an_interview_on_one_board_suppresses_the_merged_twin(spec, store) -> None:
+    """The state door, asked of the cluster and not of one fingerprint.
+
+    The store answers `has_applied` for the whole cluster; the state row has no
+    cluster-aware reader, so the digest is what has to ask. Without it, a job
+    Noam is interviewing for came back under the other board's fingerprint.
+    """
+    analysed(store, "fpA", score=0.9, site="alljobs")
+    analysed(store, "fpB", score=0.85, site="drushim")
+    store.record_link(
+        "fpA", "fpB", score=0.95, band="duplicate", method="arithmetic", now=stamp(NOW)
+    )
+    states.move(store, "fpA", "interview", spec=spec, now=NOW)
+
+    today = build(store, spec)
+    assert [i.fingerprint for i in today.items] == []
+    assert today.suppressed["later_state"] == 1
+    assert today.suppressed["duplicate"] == 1
+
+
+def test_the_digest_reads_the_gate_report_s_per_gate_verdicts(spec, store) -> None:
+    """`GateReport.as_dict()` grew a three-valued top-level verdict today.
+
+    The digest reads the per-gate list underneath it and never the top-level
+    field, which is what keeps `unknown` visible rather than folded into a
+    pass. Fed straight from a real report, so the two cannot drift apart.
+    """
+    from desk.gates.result import GateReport, GateResult, Verdict
+
+    report = GateReport(
+        (
+            GateResult("freshness", Verdict.UNKNOWN, "the board states no date"),
+            GateResult("geography", Verdict.PASS, "haifa", details={"accepted_regions": ["haifa"]}),
+        )
+    )
+    payload = report.as_dict()
+    assert payload["verdict"] == "unknown"
+    assert payload["blocked"] is False
+
+    analysed(store, "fp1", score=0.9, gates=tuple(payload["gates"]))
+    item = build(store, spec).items[0]
+    assert item.unknown_gates == ("freshness",)
+    assert item.region == "haifa"
+
+    blocked = GateReport((GateResult("geography", Verdict.BLOCK, "outside every region"),))
+    assert blocked.as_dict()["blocked"] is True
+    analysed(store, "fp2", score=0.95, gates=tuple(blocked.as_dict()["gates"]))
+
+    today = build(store, spec)
+    assert [i.fingerprint for i in today.items] == ["fp1"]
+    assert today.suppressed["blocked"] == 1
 
 
 def test_a_posting_in_a_later_state_never_reappears(spec, store) -> None:
@@ -499,6 +629,39 @@ def test_a_swept_close_appears_in_the_digest_that_swept_it(spec, store) -> None:
     text = render.as_text(today)
     assert "fp1" in text
     assert one_direction_per_line(text) == []
+
+
+def test_an_item_being_closed_today_is_neither_offered_nor_chased(spec, store) -> None:
+    """The close is found first, reported, and written only after delivery.
+
+    Between the finding and the writing, the row still says what it said, so
+    the digest has to be told what is closing — otherwise the same item is
+    listed as auto-closed and offered as a candidate in the same output, or
+    chased as a follow-up nobody is going to make.
+    """
+    analysed(store, "fp1", score=0.9)
+    states.move(store, "fp1", "shortlisted", spec=spec, now=NOW)
+    states.move(
+        store,
+        "fp2",
+        states.APPLIED,
+        spec=spec,
+        now=NOW,
+        due_at=timers.due_at_for(states.APPLIED, now=NOW, spec=spec),
+    )
+
+    later = NOW + timedelta(days=spec["manager"]["stale_days"])
+    closing = timers.pending(store, now=later, spec=spec)
+    assert set(closing) == {"fp1", "fp2"}
+
+    # Found, not yet written: the pipeline still says what it said.
+    assert states.current(store, "fp1") == "shortlisted"
+
+    today = build(store, spec, now=later, closed=closing)
+    assert today.closed == closing
+    assert today.items == ()
+    assert today.suppressed["closed"] == 1
+    assert today.follow_ups == ()
 
 
 # --------------------------------------------------------------------------
@@ -733,6 +896,70 @@ def test_the_digest_command_refuses_to_send_while_delivery_is_off(
     code = cmd_digest(Args(limit=None, min_score=None, send=True, format="text"))
     assert code == 1
     assert capsys.readouterr().out == ""
+
+
+def test_a_failed_delivery_does_not_lose_the_closes(tmp_path, monkeypatch) -> None:
+    """A close nobody was told about is a close that never happened again.
+
+    The sweep used to commit before the send. When the send failed the command
+    returned 1 with the rows already `closed`, and tomorrow's sweep found
+    nothing left to close — so that auto-close was never reported in any
+    digest, on any day. The write now happens after a successful delivery, and
+    a failure simply leaves the rows stale for tomorrow.
+
+    Only the sink is substituted here. Which sink `desk digest` is allowed to
+    build, and what it takes to build the Telegram one, is covered by the
+    delivery tests above and is untouched by this.
+    """
+    from desk.manager.command import cmd_digest
+
+    monkeypatch.setenv("DESK_HOME", str(tmp_path))
+    live_spec = load_spec()
+    old = datetime.now() - timedelta(days=live_spec["manager"]["stale_days"] + 1)
+    db = Store(paths().ensure().db)
+    states.move(db, "fp1", "shortlisted", spec=live_spec, now=old)
+    db.close()
+
+    class FailingSink:
+        def send(self, text: str) -> None:
+            raise delivery.DeliveryError("the channel refused the message")
+
+    sent: list[str] = []
+
+    class CapturingSink:
+        def send(self, text: str) -> None:
+            sent.append(text)
+
+    args = Args(limit=None, min_score=None, send=False, format="text")
+
+    monkeypatch.setattr(delivery, "sink_for", lambda *a, **k: FailingSink())
+    assert cmd_digest(args) == 1
+
+    db = Store(paths().db)
+    assert db.state("fp1")["state"] == "shortlisted"
+    db.close()
+
+    monkeypatch.setattr(delivery, "sink_for", lambda *a, **k: CapturingSink())
+    assert cmd_digest(args) == 0
+    assert "fp1" in sent[0]
+
+    db = Store(paths().db)
+    assert db.state("fp1")["state"] == states.CLOSED
+    assert db.state("fp1")["note"] == timers.STALE_NOTE
+    db.close()
+
+
+def test_the_state_command_is_the_door_that_writes_the_blocklist(tmp_path, monkeypatch) -> None:
+    """`desk state --set applied` is the production path, and it now marks."""
+    from desk.manager.command import cmd_state
+
+    monkeypatch.setenv("DESK_HOME", str(tmp_path))
+    args = Args(fingerprint="fp1", new_state="applied", note="", list_state=None, due=False)
+    assert cmd_state(args) == 0
+
+    db = Store(paths().db)
+    assert db.has_applied("fp1") is True
+    db.close()
 
 
 def test_the_state_command_reports_an_illegal_move_instead_of_doing_it(
