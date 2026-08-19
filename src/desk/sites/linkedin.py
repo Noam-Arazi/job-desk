@@ -51,8 +51,9 @@ by `max_details` and every posting left without a body is counted in
 `skipped` rather than returned as a thin row that looks complete.
 
 **The seniority band is passed through as-is, and it is not a year count.**
-The detail page states "Entry level" / "Mid-Senior level" / "Not Applicable".
-Only the first of those is a fact the seniority gate can use — it reads as a
+The detail page states one of a fixed set — "Entry level", "Associate",
+"Mid-Senior level", "Director", "Internship", "Not Applicable", all six seen
+in one real run. Only the first of those is a fact the seniority gate can use — it reads as a
 floor of zero — and the rest carry no figure, so the gate falls through to the
 prose exactly as it does on AllJobs. Passing a band into a field named for
 years is worth stating: the gate consults `stated_experience` first and would
