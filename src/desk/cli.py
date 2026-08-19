@@ -534,6 +534,101 @@ def cmd_state(args: argparse.Namespace) -> int:
     return run_state(args)
 
 
+def cmd_import_applications(args: argparse.Namespace) -> int:
+    """Load the applications Noam has been tracking by hand into the manager.
+
+    A dry run by default, like everything else that writes: what this records is
+    a history, and a history written from a misread file is worse than no
+    history, because every later reading trusts it.
+    """
+    from datetime import datetime
+
+    from . import history
+    from .config import load_spec
+
+    try:
+        entries = history.read(args.csv)
+    except (OSError, ValueError) as exc:
+        print(f"could not read {args.csv}: {exc}")
+        return 1
+    if not entries:
+        print(f"{args.csv} has no rows")
+        return 1
+
+    folder = Path(args.csv).expanduser().parent / history.DESCRIPTIONS
+    saved = history.descriptions(folder)
+
+    store = Store(paths().ensure().db)
+    try:
+        rows = history.plan(entries, store, saved)
+    except history.UnknownStatus as exc:
+        print(f"REFUSED  {exc}")
+        store.close()
+        return 1
+
+    print(f"tracker  {len(entries)} rows   {'WRITE' if args.write else 'dry run'}")
+    by_state: dict[str, int] = {}
+    for row in rows:
+        by_state[row.state] = by_state.get(row.state, 0) + 1
+    for state, count in sorted(by_state.items()):
+        print(f"  {state:<12} {count}")
+    known = sum(1 for r in rows if r.known)
+    print(f"matched  {known} already in the store, {len(rows) - known} become manual postings")
+
+    described = [r for r in rows if r.body]
+    print(f"bodies   {len(described)} of {len(rows)} carry a saved job description")
+    # A file nobody matched is reported rather than ignored: it is a posting
+    # Noam took the trouble to save, and the likeliest reason it matched nothing
+    # is a filename one character off from the company in the tracker.
+    unused = sorted(set(saved) - {r.description_file for r in described})
+    for name in unused:
+        print(f"    unmatched file  {name}")
+
+    print("")
+    for row in rows:
+        mark = "=" if row.current == row.state else ">"
+        origin = "store " if row.known else "manual"
+        company = row.entry.company[:28]
+        print(f"  {mark} {origin} {row.state:<11} {company:<28} {row.entry.role[:40]}")
+
+    stale = history.orphans(entries, store)
+    if stale:
+        print("")
+        print(f"abandoned {len(stale)} manual postings no tracker row names any more:")
+        for row in stale:
+            print(f"    {row['company'][:28]:<28} {row['title'][:40]}")
+        print("    these were written by an earlier import of a line that has since been edited")
+        if not args.prune:
+            print("    re-run with --prune to remove them")
+
+    if not args.write:
+        print("")
+        print("nothing recorded. re-run with --write to load them")
+        store.close()
+        return 0
+
+    result = history.apply(rows, store, spec=load_spec(), now=datetime.now())
+    pruned = history.prune(stale, store) if args.prune else 0
+    store.close()
+    summary = result.summary()
+    print("")
+    print(
+        f"recorded {summary['written']} applications, "
+        f"{summary['matched_existing']} onto postings the store already had"
+    )
+    if summary["skipped"]:
+        print(f"skipped  {summary['skipped']} already in that state")
+    if summary["reclocked"]:
+        print(f"reclock  {summary['reclocked']} follow-up dates corrected")
+    if pruned:
+        print(f"pruned   {pruned} abandoned manual postings removed")
+    for row, why in result.refused:
+        print(f"REFUSED  {row.entry.company}: {why}")
+    print("")
+    print("run `desk resolve --write` next: it is what links these to the scraped postings")
+    return 1 if result.refused else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="desk", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -607,6 +702,22 @@ def build_parser() -> argparse.ArgumentParser:
     duplicates.add_argument("--count", type=int, default=20)
     duplicates.add_argument("--seed", type=int, default=0, help="same seed, same pairs")
     duplicates.set_defaults(func=cmd_review_duplicates)
+
+    imports = sub.add_parser(
+        "import-applications", help="load the hand-kept application tracker into the manager"
+    )
+    imports.add_argument(
+        "--csv",
+        default=str(Path.home() / "Desktop" / "קורות חיים" / "הגשות.csv"),
+        help="the tracker to read",
+    )
+    imports.add_argument("--write", action="store_true", help="record them; otherwise a dry run")
+    imports.add_argument(
+        "--prune",
+        action="store_true",
+        help="remove manual postings from an earlier import that the tracker no longer names",
+    )
+    imports.set_defaults(func=cmd_import_applications)
 
     baseline = sub.add_parser("baseline", help="the single-agent run the table compares against")
     baseline.add_argument("--limit", type=int, default=20, help="postings to send")

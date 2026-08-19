@@ -624,6 +624,61 @@ class Store:
             )
         return previous
 
+    def forget(self, fingerprint: str, *, only_site: str) -> bool:
+        """Erase a posting and everything hanging off it. Refuses any other site.
+
+        The one destructive method in this class, and it exists for one reason:
+        a posting minted from a line of a hand-kept file is only as stable as
+        that line. Correct a job title in the tracker and the content
+        fingerprint changes, so the next import writes a second identity and
+        the first one stays behind in `applied` forever — a duplicate the
+        digest suppresses and the counts still carry.
+
+        `only_site` is required and checked against the row rather than trusted,
+        so a caller that passes the wrong fingerprint deletes nothing instead of
+        deleting a scraped posting and the history attached to it.
+        """
+        row = self.conn.execute(
+            "SELECT site FROM postings WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        if row is None or row["site"] != only_site:
+            return False
+        with self.tx() as c:
+            for table in ("pipeline_state", "state_events", "applications", "decisions"):
+                c.execute(f"DELETE FROM {table} WHERE fingerprint = ?", (fingerprint,))
+            c.execute(
+                "DELETE FROM duplicate_links WHERE left_fp = ? OR right_fp = ?",
+                (fingerprint, fingerprint),
+            )
+            c.execute("DELETE FROM postings WHERE fingerprint = ?", (fingerprint,))
+            c.execute("DELETE FROM fingerprints WHERE fingerprint = ?", (fingerprint,))
+        return True
+
+    def postings_from(self, site: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute("SELECT * FROM postings WHERE site = ?", (site,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def set_due_at(self, fingerprint: str, due_at: str | None) -> bool:
+        """Correct the follow-up date without inventing a transition.
+
+        The clock is derived from when the application went out, not from a
+        move, so a row whose state is already right but whose date is missing
+        needs the date fixed and nothing else. Writing it through `set_state`
+        would append a state event saying the item moved from `applied` to
+        `applied` — a thing that never happened, in the log that exists to say
+        what did. Returns whether anything changed.
+        """
+        with self.tx() as c:
+            row = c.execute(
+                "SELECT due_at FROM pipeline_state WHERE fingerprint = ?", (fingerprint,)
+            ).fetchone()
+            if row is None or row["due_at"] == due_at:
+                return False
+            c.execute(
+                "UPDATE pipeline_state SET due_at = ? WHERE fingerprint = ?", (due_at, fingerprint)
+            )
+        return True
+
     def state(self, fingerprint: str) -> dict[str, Any] | None:
         row = self.conn.execute(
             "SELECT * FROM pipeline_state WHERE fingerprint = ?", (fingerprint,)
