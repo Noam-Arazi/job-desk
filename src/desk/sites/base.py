@@ -179,6 +179,7 @@ def crawl_terms(
                     skipped[reason] = skipped.get(reason, 0) + count
 
                 fresh = 0
+                new_here = 0
                 for posting in parsed["postings"]:
                     if posting.posted_at and posting.posted_at < cutoff:
                         continue
@@ -186,6 +187,7 @@ def crawl_terms(
                     if posting.external_id not in found:
                         found[posting.external_id] = posting
                         matched[posting.external_id] = []
+                        new_here += 1
                     if term not in matched[posting.external_id]:
                         matched[posting.external_id].append(term)
 
@@ -194,6 +196,16 @@ def crawl_terms(
                     break
                 if fresh == 0:
                     stops.append(f"{label}: page {page} was entirely older than the window")
+                    break
+                # "Nothing new", not "nothing fresh". A board that answers every
+                # page number with its last page returns postings that are
+                # perfectly fresh and already held, and counting those as
+                # progress walks to the page ceiling fetching the same page over
+                # and over. One of the three boards here does exactly that, and
+                # its own module already stops this way; the shared helper the
+                # other two use did not.
+                if new_here == 0:
+                    stops.append(f"{label}: page {page} added nothing new")
                     break
             else:
                 stops.append(f"{label}: hit the {max_pages}-page ceiling")

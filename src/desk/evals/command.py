@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import load_spec, paths
+from ..gates.chain import store_first_seen
 from ..store import Store
 from . import agreement as agreement_suite
 from . import cost as cost_suite
@@ -115,7 +116,14 @@ def run_suites(
         try:
             if name == gates_suite.SUITE:
                 results.append(
-                    gates_suite.run(store.all_postings(), store.labels(), spec=spec, now=now)
+                    gates_suite.run(
+                        store.all_postings(),
+                        store.labels(),
+                        spec=spec,
+                        now=now,
+                        first_seen=store_first_seen(store),
+                        has_applied=store.has_applied,
+                    )
                 )
             elif name == agreement_suite.SUITE:
                 results.append(

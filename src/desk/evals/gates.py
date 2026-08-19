@@ -59,9 +59,20 @@ def run(
     *,
     spec: Mapping[str, Any],
     now: datetime,
+    first_seen: Any = None,
+    has_applied: Any = None,
 ) -> SuiteResult:
-    """Score the gates against the labels, if there are any labels."""
-    report = gold.agreement(rows, labels, spec=spec, now=now)
+    """Score the gates against the labels, if there are any labels.
+
+    `first_seen` and `has_applied` are the store-backed inputs the daily run
+    binds. Left unbound the freshness gate has nothing to ask how old a role
+    really is and the applied gate can never fire, so the suite would be
+    scoring a differently-configured chain than the one it reports on — which
+    is the same error as measuring a filter with its own output.
+    """
+    report = gold.agreement(
+        rows, labels, spec=spec, now=now, first_seen=first_seen, has_applied=has_applied
+    )
 
     if not report.labelled:
         return SuiteResult(
@@ -122,7 +133,9 @@ def run(
         ),
     ]
 
-    drift = _stratum_drift(rows, labels, spec=spec, now=now)
+    drift = _stratum_drift(
+        rows, labels, spec=spec, now=now, first_seen=first_seen, has_applied=has_applied
+    )
     measurements.append(
         Measurement(
             "stratum drift",
@@ -190,6 +203,8 @@ def _stratum_drift(
     *,
     spec: Mapping[str, Any],
     now: datetime,
+    first_seen: Any = None,
+    has_applied: Any = None,
 ) -> int:
     """Labels whose recorded stratum no longer matches the live gate verdict.
 
@@ -207,7 +222,13 @@ def _stratum_drift(
         recorded = label.get("stratum") or ""
         if recorded not in (gold.SURVIVED, gold.BLOCKED):
             continue
-        blocked = run_gates(Candidate.from_row(row), spec=spec, now=now).blocked
+        blocked = run_gates(
+            Candidate.from_row(row),
+            spec=spec,
+            now=now,
+            first_seen=first_seen,
+            has_applied=has_applied,
+        ).blocked
         live = gold.BLOCKED if blocked else gold.SURVIVED
         if live != recorded:
             drifted += 1
