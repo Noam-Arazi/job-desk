@@ -8,6 +8,7 @@ desk digest    the daily ranked digest; it never applies for you
 desk state     show or move where a posting stands
 desk propose   draft a short proposal for one freelance project
 desk evals     score the system against the gold set
+desk review-duplicates   judge duplicate pairs by hand, unprompted
 desk baseline  one conversation over every posting, for the comparison
 desk spec      show what the search specification currently says
 desk tools     show the registered tools and their permission tiers
@@ -396,6 +397,74 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return run_digest(args)
 
 
+def cmd_review_duplicates(args: argparse.Namespace) -> int:
+    """Judge duplicate pairs by hand, without being shown what was decided.
+
+    Precision and recall for the resolver are the two measurements nothing in
+    this repo can produce on its own, because "is this the same seat" has no
+    mechanical answer. The screen shows two adverts and asks. It does not say
+    whether the resolver merged them, for the same reason `desk label` does not
+    show a score: agreeing with a verdict you were just shown measures how
+    convincing it looked.
+    """
+    from datetime import datetime
+
+    from .evals.dedup import CLUSTERS_PATH as FIXTURE_PATH
+    from .resolve import review
+
+    store = Store(paths().ensure().db)
+    links = store.links()
+    rows = {r["fingerprint"]: r for r in store.all_postings()}
+    store.close()
+    if not links:
+        print("no verdicts recorded yet; run `desk resolve --write` first")
+        return 1
+
+    fixture = review.load_fixture(FIXTURE_PATH)
+    pairs = review.sample(
+        links,
+        rows,
+        size=args.count,
+        seed=args.seed,
+        exclude=review.already_judged(fixture),
+    )
+    if not pairs:
+        print("every pair the resolver ruled on has already been judged by hand")
+        return 0
+
+    print(f"{len(pairs)} pairs, one at a time. Nothing here says what the resolver decided.")
+    print("s = same opening · d = different · enter = skip · q = stop")
+    print("")
+
+    judged = 0
+    for index, pair in enumerate(pairs, start=1):
+        print(f"--- {index} of {len(pairs)} " + "-" * 40)
+        for line in pair.as_lines():
+            print(line)
+        answer = input("same opening? [s/d/enter/q] ").strip().lower()
+        if answer == "q":
+            break
+        verdict = {"s": review.SAME, "d": review.DIFFERENT}.get(answer, review.SKIP)
+        if verdict is review.SKIP or verdict == review.SKIP:
+            print("skipped — it stays unjudged rather than becoming a guess")
+            print("")
+            continue
+        review.record(
+            fixture,
+            pair,
+            verdict,
+            now=datetime.now().isoformat(timespec="seconds"),
+            by="noam",
+        )
+        judged += 1
+        print("")
+
+    review.save(fixture, FIXTURE_PATH)
+    print(f"recorded {judged} judgements in {FIXTURE_PATH.name}")
+    print("re-score with: uv run desk evals --suite dedup")
+    return 0
+
+
 def cmd_baseline(args: argparse.Namespace) -> int:
     """The expensive arm of the experiment, run deliberately and never daily.
 
@@ -531,6 +600,13 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--send", action="store_true", help="deliver it; off by default")
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)
+
+    duplicates = sub.add_parser(
+        "review-duplicates", help="judge duplicate pairs by hand, unprompted"
+    )
+    duplicates.add_argument("--count", type=int, default=20)
+    duplicates.add_argument("--seed", type=int, default=0, help="same seed, same pairs")
+    duplicates.set_defaults(func=cmd_review_duplicates)
 
     baseline = sub.add_parser("baseline", help="the single-agent run the table compares against")
     baseline.add_argument("--limit", type=int, default=20, help="postings to send")
