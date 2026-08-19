@@ -40,14 +40,14 @@ seeing, and it disappears if the loop only reports its survivors.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from ..gates.chain import Candidate
 from ..llm.base import LLMRequest
 from ..prompts import load as load_prompt
-from .extract import posting_text
+from .extract import posting_fields
 from .types import Requirement
 
 STAGE = "reflect_anchors"
@@ -81,6 +81,14 @@ SYSTEM = (
 
 _WS = re.compile(r"\s+")
 
+# Right-to-left and left-to-right marks, and the zero-width space. These are
+# invisible, they are not whitespace, and Hebrew boards emit them: 14 postings
+# in the live store carry one inside a title or a body. A model retyping such a
+# span writes an ordinary space, containment fails, and a correctly quoted
+# requirement is deleted as an invention — the exact opposite of what this
+# check exists to do. They are stripped from both sides before comparing.
+_INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
+
 # A span shorter than this proves nothing: one or two characters are in every
 # posting, and a requirement anchored to "ב" is anchored to nothing. Three is
 # the floor rather than something safer because "SQL" and "BI" are real spans a
@@ -97,21 +105,34 @@ def normalize(text: str, *, spec: Mapping[str, Any]) -> str:
     """The form both sides of the containment check are compared in."""
     if not settings(spec).get("normalize_whitespace", True):
         return text
-    return _WS.sub(" ", text).strip()
+    return _WS.sub(" ", _INVISIBLE.sub("", text)).strip()
 
 
-def anchored(requirement: Requirement, haystack: str, *, spec: Mapping[str, Any]) -> bool:
+def anchored(
+    requirement: Requirement,
+    haystack: str | Sequence[str],
+    *,
+    spec: Mapping[str, Any],
+) -> bool:
     """Whether the requirement's quoted span is literally in the posting.
 
     Empty and near-empty spans are not anchored. A model that cannot quote the
     posting will sometimes return a blank rather than admit it, and a blank is
     contained in every string — without this the check would pass exactly the
     requirements it exists to catch.
+
+    The span is checked against each field on its own and never against the
+    fields joined together. Collapsing the whole posting into one string makes
+    the end of the title adjacent to the start of the company name, and a model
+    that quotes across that seam produces a phrase no field of the posting ever
+    contained — which the check would then confirm as evidence. The gate chain
+    guards the same seam for the same reason.
     """
     evidence = normalize(requirement.evidence, spec=spec)
     if len(evidence) < MIN_EVIDENCE_CHARS:
         return False
-    return evidence in normalize(haystack, spec=spec)
+    fields = (haystack,) if isinstance(haystack, str) else tuple(haystack)
+    return any(evidence in normalize(field, spec=spec) for field in fields)
 
 
 @dataclass(frozen=True)
@@ -121,6 +142,10 @@ class Reflection:
     requirements: tuple[Requirement, ...] = ()
     dropped: tuple[str, ...] = ()
     rounds: int = 0
+    # Everything the generator handed over, across every round. The stored
+    # requirements are the survivors, so without this number nothing downstream
+    # can say what share of them survived.
+    extracted: int = 0
     unanchored: int = 0
     unsupported: int = 0
     calls: int = 0
@@ -160,7 +185,10 @@ def unsupported_indices(parsed: Any, count: int) -> set[int]:
         return set()
     rejected: set[int] = set()
     for verdict in parsed.get("verdicts") or ():
-        if not isinstance(verdict, dict) or verdict.get("supported", True):
+        # Only an explicit false deletes. The docstring above says silence is
+        # not rejection, and a truthiness test made null, 0 and "" behave like
+        # a rejection — which is silence arriving in a different shape.
+        if not isinstance(verdict, dict) or verdict.get("supported", True) is not False:
             continue
         index = verdict.get("index")
         if isinstance(index, int) and 0 <= index < count:
@@ -180,7 +208,7 @@ def reflect(
     config = settings(spec)
     max_rounds = max(1, int(config.get("max_rounds", 2)))
     drop_unanchored = bool(config.get("drop_unanchored", True))
-    haystack = posting_text(candidate)
+    haystack = posting_fields(candidate)
 
     kept: list[Requirement] = []
     dropped: list[str] = []
@@ -223,9 +251,16 @@ def reflect(
         # halves of the loop stay separable in the run summary.
         pending = regenerate(deleted_this_round)
 
+    # A span deleted in round one and re-quoted correctly in round two was
+    # repaired, not lost. Leaving it in `dropped` reports the loop's own working
+    # as damage: the eval suite reads this field as the fabrication rate, and a
+    # posting that ended up losing nothing would be counted as having lost a
+    # requirement.
+    rescued = {r.text for r in kept}
     return Reflection(
+        extracted=len(seen),
         requirements=tuple(kept),
-        dropped=tuple(dropped),
+        dropped=tuple(text for text in dropped if text not in rescued),
         rounds=rounds,
         unanchored=unanchored,
         unsupported=unsupported,

@@ -101,9 +101,26 @@ def term_index(spec: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
     index: dict[str, tuple[str, ...]] = {}
     for family, config in (spec.get("families") or {}).items():
         terms = list(config.get("terms_he") or ()) + list(config.get("terms_en") or ())
-        normalized = {readable(str(t)) for t in terms}
-        index[str(family)] = tuple(sorted((t for t in normalized if t), key=len, reverse=True))
+        seen: dict[str, None] = {}
+        for term in terms:
+            flat = readable(str(term))
+            if flat:
+                seen.setdefault(flat, None)
+        index[str(family)] = tuple(seen)
     return index
+
+
+def by_length(terms: tuple[str, ...]) -> tuple[str, ...]:
+    """Longest first, which is a matching order and not a reading order.
+
+    The matcher wants the longest term that fits, so that "data analyst" is
+    reported rather than the "analyst" inside it. Every other caller wants the
+    spec's own order, and the two were the same tuple: a prompt that showed a
+    family's first sixteen terms was showing its sixteen longest, so the scorer
+    was told ai_builder stands for "automation specialist" and never for RAG,
+    GenAI or agentic — the terms that actually name it.
+    """
+    return tuple(sorted(terms, key=len, reverse=True))
 
 
 def cv_base(spec: Mapping[str, Any], family: str) -> str:
@@ -116,6 +133,7 @@ def cv_base(spec: Mapping[str, Any], family: str) -> str:
 # next word, so "באנליסט" is the same word as "אנליסט". One such letter is
 # allowed in front of a term; anything else in front means a different word.
 _PREFIXES = "בלמהוכש"
+_MAX_PREFIXES = 2
 
 
 def _is_hebrew(char: str) -> bool:
@@ -137,13 +155,24 @@ def _standalone(text: str, start: int, end: int) -> bool:
     after = text[end] if end < len(text) else " "
     if _is_letter(after):
         return False
-    before = text[start - 1] if start > 0 else " "
-    if not _is_letter(before):
-        return True
-    if not _is_hebrew(before) or before not in _PREFIXES:
-        return False
-    two_back = text[start - 2] if start > 1 else " "
-    return not _is_letter(two_back)
+    # Hebrew stacks its prefixes: ולאנליסט is "and to an analyst", ושהאנליסט is
+    # "and that the analyst". One allowed prefix letter was enough for the
+    # single-prefix forms and silently refused the stacked ones, and the refusal
+    # falls the expensive way — no family means the posting stops before it is
+    # ever scored. Two is the practical ceiling in these titles, and it stays a
+    # ceiling so that a three-letter run, which is a different word, still reads
+    # as one.
+    prefixes = 0
+    index = start - 1
+    while index >= 0 and prefixes < _MAX_PREFIXES:
+        char = text[index]
+        if not _is_letter(char):
+            return True
+        if not _is_hebrew(char) or char not in _PREFIXES:
+            return False
+        prefixes += 1
+        index -= 1
+    return index < 0 or not _is_letter(text[index])
 
 
 def _found(text: str, terms: tuple[str, ...]) -> str:
@@ -173,6 +202,7 @@ def matches(candidate: Candidate, *, spec: Mapping[str, Any]) -> tuple[Match, ..
 
     found: list[Match] = []
     for family, terms in sorted(index.items()):
+        terms = by_length(terms)
         in_title = _found(title, terms)
         if in_title:
             found.append(Match(family, in_title, TITLE))

@@ -149,13 +149,32 @@ def is_self_trace(run_id: str) -> bool:
 
 
 def model_calls(events: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Every model call in a trace, successful or not."""
     return [dict(e) for e in events if e.get("kind") == MODEL_END]
+
+
+def succeeded(call: Mapping[str, Any]) -> bool:
+    """Whether a call actually returned an answer.
+
+    A refused call — an expired session, a rate limit — writes a model.end span
+    carrying `ok: false` and zero tokens. Counted as data it reads as a stage
+    that ran and cost nothing, which is the most flattering possible reading of
+    a run that did not happen: today's traces show `extract_requirements: 1
+    call, 0 in, 0 out, $0.000000` for a stage the engine refused outright.
+    """
+    return call.get("ok") is not False
+
+
+def failed_calls(events: Sequence[Mapping[str, Any]]) -> int:
+    return sum(1 for call in model_calls(events) if not succeeded(call))
 
 
 def per_stage(events: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
     """Tokens and list-price cost, attributed to the stage that spent them."""
     stages: dict[str, dict[str, Any]] = {}
     for call in model_calls(events):
+        if not succeeded(call):
+            continue
         stage = str(call.get("name") or "?")
         usage = dict(call.get("usage") or {})
         row = stages.setdefault(
@@ -260,11 +279,24 @@ def run(
     total_usd = sum(row["usd"] for row in stages.values())
     projected_in = sum(single_agent_projection(ev) for ev in found.values())
 
+    refused = sum(failed_calls(ev) for ev in found.values())
+    runs = len(found)
+
     measurements: list[Measurement] = [
-        Measurement("run traces read", len(found), detail=", ".join(sorted(found))),
+        Measurement("run traces read", runs, detail=", ".join(sorted(found))),
         Measurement("model calls", calls, detail=f"across {len(stages)} stages"),
         Measurement("input tokens", total_in, unit=TOKENS),
         Measurement("output tokens", total_out, unit=TOKENS),
+        # Everything above is a sum across every trace under runs/, which is a
+        # history and not a day. A sentence of the form "a daily run costs X"
+        # cannot be read off a total, so the per-run figure is stated rather
+        # than left for a reader to assume.
+        Measurement(
+            "input tokens per run",
+            round(total_in / runs, 1),
+            unit=TOKENS,
+            detail=f"{total_in} across {runs} traces — these are whole runs, not days",
+        ),
         Measurement(
             "list-price equivalent",
             round(total_usd, 6),
@@ -292,6 +324,16 @@ def run(
         missing("latency", NO_LATENCY, unit=SECONDS),
     ]
 
+    if refused:
+        measurements.append(
+            Measurement(
+                "calls the engine refused",
+                refused,
+                detail="excluded from every figure above; a call that returned "
+                "nothing is not a stage that ran for free",
+            )
+        )
+
     notes = [PRICE_NOTE]
     if self_note:
         notes.append(self_note)
@@ -300,7 +342,7 @@ def run(
     # 0.0x", which is the most flattering possible lie about the orchestrated
     # side. An unsuccessful run is missing data, exactly like no run at all.
     if baseline_events is not None and not any(
-        call.get("ok") is not False and int((call.get("usage") or {}).get("input_tokens", 0))
+        succeeded(call) and int((call.get("usage") or {}).get("input_tokens", 0))
         for call in model_calls(baseline_events)
     ):
         measurements.append(missing("measured single-agent baseline", FAILED_BASELINE, unit=TOKENS))

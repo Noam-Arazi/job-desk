@@ -161,6 +161,48 @@ def run(
             missing("unanchored", why),
         ]
 
+    # The generator's own rate, which is the number this suite is actually
+    # about. The re-check above reads the stored requirements — and those are
+    # exactly the ones the reflection loop already kept, using the same
+    # containment test, so it can only ever come out at 100 percent however
+    # badly the extractor behaved. It stays, because it catches a stored
+    # analysis drifting out of agreement with the posting it was read from, but
+    # it is not evidence about extraction. These three counts are.
+    produced = sum(a.extracted for a in analyses)
+    invented = sum(a.unanchored for a in analyses)
+    refused = sum(a.unsupported for a in analyses)
+    if produced:
+        measurements += [
+            Measurement(
+                "requirements the generator produced",
+                produced,
+                detail="before either half of the reflection loop deleted anything",
+            ),
+            Measurement(
+                "anchored when first produced",
+                (produced - invented) / produced,
+                unit=SHARE,
+                detail=f"{produced - invented} of {produced}; the rest quoted a span "
+                "the posting does not contain",
+            ),
+            Measurement(
+                "deleted by the evaluator",
+                refused,
+                detail="anchored, but the quote did not support the line",
+            ),
+        ]
+    else:
+        why = (
+            "these analyses predate the counts; re-run `desk analyze --write`"
+            if analyses
+            else NO_ANALYSES
+        )
+        measurements += [
+            missing("requirements the generator produced", why),
+            missing("anchored when first produced", why, unit=SHARE),
+            missing("deleted by the evaluator", why),
+        ]
+
     measurements.append(
         Measurement(
             "dropped by reflection, per posting",

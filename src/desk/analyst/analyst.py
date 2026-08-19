@@ -131,6 +131,9 @@ class Analyst:
                 STOPPED_REFLECT,
                 rounds=reflection.rounds,
                 dropped=reflection.dropped,
+                extracted=reflection.extracted,
+                unanchored=reflection.unanchored,
+                unsupported=reflection.unsupported,
             )
 
         fit = score.score(
@@ -150,6 +153,9 @@ class Analyst:
             stopped_at="",
             rounds=reflection.rounds,
             dropped=reflection.dropped,
+            extracted=reflection.extracted,
+            unanchored=reflection.unanchored,
+            unsupported=reflection.unsupported,
         )
 
     def _stop(
@@ -161,6 +167,9 @@ class Analyst:
         *,
         rounds: int = 0,
         dropped: tuple[str, ...] = (),
+        extracted: int = 0,
+        unanchored: int = 0,
+        unsupported: int = 0,
     ) -> Analysis:
         self.stops[stopped_at] += 1
         return self._analysis(
@@ -172,6 +181,9 @@ class Analyst:
             stopped_at=stopped_at,
             rounds=rounds,
             dropped=dropped,
+            extracted=extracted,
+            unanchored=unanchored,
+            unsupported=unsupported,
         )
 
     def _analysis(
@@ -185,6 +197,9 @@ class Analyst:
         stopped_at: str,
         rounds: int,
         dropped: tuple[str, ...],
+        extracted: int = 0,
+        unanchored: int = 0,
+        unsupported: int = 0,
     ) -> Analysis:
         return Analysis(
             fingerprint=candidate.fingerprint,
@@ -199,6 +214,9 @@ class Analyst:
             stopped_at=stopped_at,
             reflect_rounds=rounds,
             dropped=dropped,
+            extracted=extracted,
+            unanchored=unanchored,
+            unsupported=unsupported,
             run_id=self.run_id,
         )
 

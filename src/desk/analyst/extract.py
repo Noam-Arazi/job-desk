@@ -81,8 +81,19 @@ def posting_text(candidate: Candidate) -> str:
     is meaningless: a span quoted out of the title would fail against a body,
     and the requirement would be deleted as fabricated when it was not.
     """
+    return "\n".join(posting_fields(candidate))[:BODY_CHARS]
+
+
+def posting_fields(candidate: Candidate) -> tuple[str, ...]:
+    """The same text, kept as separate fields.
+
+    The anchoring check reads these rather than the joined string, so that a
+    span quoted across the seam between two fields cannot pass as evidence. The
+    joined form still exists because it is what the model is shown, and the two
+    must be built from one place or they will drift.
+    """
     parts = [candidate.title, candidate.company, candidate.location, candidate.body]
-    return "\n".join(p for p in parts if p)[:BODY_CHARS]
+    return tuple(p for p in parts if p)
 
 
 def build_request(candidate: Candidate) -> LLMRequest:

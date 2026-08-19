@@ -1312,3 +1312,78 @@ def test_a_baseline_that_died_is_missing_and_not_a_measured_zero() -> None:
     assert baseline[0].value is None, "a died baseline must report as missing"
     assert "not a measurement of zero" in (baseline[0].missing or "")
     assert not [m for m in result.measurements if m.name == "measured context saving"]
+
+
+def test_the_anchoring_rate_is_measured_on_what_the_generator_produced() -> None:
+    """The re-check over stored requirements cannot fail, and used to be the number.
+
+    A stored analysis only ever carries the requirements the reflection loop
+    already kept, using the same containment test — so "share anchored" over
+    them reads 100% however badly the extractor behaved. That is the suite
+    measuring the filter instead of the thing being filtered.
+    """
+    from desk.evals import extraction
+
+    analysis = Analysis(
+        fingerprint="fp",
+        requirements=(Requirement(text="SQL", evidence="שליטה ב-SQL"),),
+        extracted=4,
+        unanchored=2,
+        unsupported=1,
+    )
+    postings = {"fp": {"title": "אנליסט/ית", "body": "שליטה ב-SQL"}}
+    result = extraction.run([analysis], postings, spec={})
+    by_name = {m.name: m for m in result.measurements}
+
+    assert by_name["anchored to a real span"].value == 1.0, "the circular one, kept but not alone"
+    assert by_name["requirements the generator produced"].value == 4
+    assert by_name["anchored when first produced"].value == 0.5
+    assert by_name["deleted by the evaluator"].value == 1
+
+
+def test_analyses_written_before_the_counts_say_so_rather_than_reading_zero() -> None:
+    from desk.evals import extraction
+
+    old = Analysis(fingerprint="fp", requirements=(Requirement(text="SQL", evidence="SQL"),))
+    result = extraction.run([old], {"fp": {"body": "SQL"}}, spec={})
+    produced = next(
+        m for m in result.measurements if m.name == "requirements the generator produced"
+    )
+    assert produced.value is None
+    assert "re-run" in (produced.missing or "")
+
+
+def test_a_refused_call_is_not_a_stage_that_ran_for_free() -> None:
+    """An expired session writes a model.end span with ok=false and zero tokens.
+
+    Counted as data that reads "extract_requirements: 1 call, 0 in, 0 out,
+    $0.000000" — a stage that ran and cost nothing, which is the most
+    flattering possible reading of a run that did not happen.
+    """
+    from desk.evals import cost
+
+    events = [
+        {
+            "kind": "model.end",
+            "name": "normalize_posting",
+            "model": "claude-haiku-4-5",
+            "ok": True,
+            "usage": {"input_tokens": 600, "output_tokens": 90, "cache_read_tokens": 0},
+        },
+        {
+            "kind": "model.end",
+            "name": "extract_requirements",
+            "model": "claude-sonnet-5",
+            "ok": False,
+            "error": "ClaudeCodeError: OAuth session expired",
+            "usage": {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0},
+        },
+    ]
+    result = cost.run(runs_dir=Path("."), traces={"analyze-0000": events})
+    by_name = {m.name: m for m in result.measurements}
+
+    assert by_name["model calls"].value == 1
+    assert by_name["calls the engine refused"].value == 1
+    stages = {cell for row in result.tables[0].rows for cell in row}
+    assert "extract_requirements" not in stages
+    assert by_name["input tokens per run"].value == 600.0

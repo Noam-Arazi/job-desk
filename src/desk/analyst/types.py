@@ -157,6 +157,14 @@ class Analysis:
     stopped_at: str = ""
     reflect_rounds: int = 0
     dropped: tuple[str, ...] = ()
+    # What the generator produced, and what the two halves of the loop deleted.
+    # Without these the stored requirements are only ever the ones that already
+    # passed the anchoring check, so a suite measuring "share anchored" over
+    # them reads 100 percent however badly the extractor behaved — it would be
+    # measuring the filter, not the thing being filtered.
+    extracted: int = 0
+    unanchored: int = 0
+    unsupported: int = 0
     run_id: str = ""
 
     @property
@@ -181,6 +189,9 @@ class Analysis:
             "stopped_at": self.stopped_at,
             "reflect_rounds": self.reflect_rounds,
             "dropped": list(self.dropped),
+            "extracted": self.extracted,
+            "unanchored": self.unanchored,
+            "unsupported": self.unsupported,
             "run_id": self.run_id,
         }
 
@@ -202,6 +213,9 @@ class Analysis:
             stopped_at=str(data.get("stopped_at", "")),
             reflect_rounds=int(data.get("reflect_rounds", 0)),
             dropped=tuple(str(d) for d in data.get("dropped", ())),
+            extracted=int(data.get("extracted", 0)),
+            unanchored=int(data.get("unanchored", 0)),
+            unsupported=int(data.get("unsupported", 0)),
             run_id=str(data.get("run_id", "")),
         )
 
