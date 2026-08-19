@@ -38,8 +38,14 @@ _REMOTE_MARKERS = (
 )
 
 # A remote posting on an Israeli board is an Israeli remote posting. The spec
-# excludes international remote, and none of the enabled sites list it.
-_ISRAELI_BOARDS = ("alljobs", "drushim", "gotfriends", "jobify", "xplace", "linkedin")
+# excludes international remote, and none of the sites it lists carry it.
+#
+# Read from the spec rather than repeated here. The hardcoded copy said the
+# same thing on the day it was written and could only drift in one direction:
+# a site added to the spec and not to this tuple would have every one of its
+# remote postings answered `unknown`, silently, with nothing to notice it.
+def _israeli_boards(spec: Mapping[str, Any]) -> frozenset[str]:
+    return frozenset(str(entry.get("id", "")) for entry in spec.get("sites", ()) if entry.get("id"))
 
 
 # Towns rejected one by one rather than by the region they sit in. They need a
@@ -203,7 +209,7 @@ def check(
 
     remote = _remote_marker(readable(location, title, body))
     if remote:
-        if site and site not in _ISRAELI_BOARDS:
+        if site and site not in _israeli_boards(spec):
             return GateResult(
                 GATE,
                 Verdict.UNKNOWN,

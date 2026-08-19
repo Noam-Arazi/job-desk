@@ -677,3 +677,21 @@ def test_the_chain_serializes_three_verdicts_and_not_two(spec) -> None:
     )
     assert refused.as_dict()["verdict"] == "block"
     assert refused.as_dict()["blocked"] is True
+
+
+def test_a_board_the_spec_lists_is_an_israeli_board(spec) -> None:
+    """The list of boards was repeated in code and could only drift one way.
+
+    A site added to the spec and not to the copy in the gate would have every
+    remote posting it carries answered `unknown`, silently.
+    """
+    spec["sites"].append({"id": "newboard", "order": 9, "enabled": True})
+    result = geography.check(
+        spec=spec, location="עבודה מהבית", title="", body="", site="newboard"
+    )
+    assert result.verdict is not Verdict.UNKNOWN
+
+    foreign = geography.check(
+        spec=spec, location="עבודה מהבית", title="", body="", site="weworkremotely"
+    )
+    assert foreign.verdict is Verdict.UNKNOWN
