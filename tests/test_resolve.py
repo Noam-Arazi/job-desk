@@ -324,3 +324,27 @@ def test_a_pair_is_stored_once_whichever_order_it_arrives_in(ctx) -> None:
     rows = ctx.store.links()
     assert len(rows) == 1
     assert rows[0]["method"] == "judged"
+
+
+def test_a_judge_whose_model_errors_says_different_rather_than_crashing() -> None:
+    """The module promised this and the code did not keep it.
+
+    A client error propagated straight out of `judge` and took the whole resolve
+    step with it. Refusing to merge is the safe direction: two rows where there
+    should be one is a line the human dismisses, where a merge on an error hides
+    a job behind an unrelated one.
+    """
+    from desk.resolve.judge import gateway_judge
+    from desk.resolve.resolver import PairScore
+
+    class Broken:
+        def complete(self, request, ctx=None):
+            raise RuntimeError("the engine is down")
+
+    judge = gateway_judge(Broken())
+    left = {"title": "אנליסט", "company": "סונול", "body": "x", "site": "alljobs"}
+    right = {"title": "אנליסט", "company": "סונול", "body": "y", "site": "drushim"}
+    score = PairScore(
+        left="a", right="b", core=1.0, body=0.5, company=True, score=0.7, band="uncertain"
+    )
+    assert judge(left, right, score) is False

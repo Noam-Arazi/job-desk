@@ -56,7 +56,6 @@ class Gateway:
         ctx: Any = None,
     ) -> LLMResponse:
         route: Route = resolve(req.stage, override_model)
-        self._check_budget(ctx)
 
         attempt = 0
         last_error: Exception | None = None
@@ -69,6 +68,12 @@ class Gateway:
             prompt_sha256=req.prompt_sha256,
         ) as span:
             while attempt <= self.max_schema_retries:
+                # Checked every time round, not once before the loop. The retry
+                # is a second billable call, and the ceiling that was checked
+                # against an empty tally cannot speak for what the first call
+                # already spent: a $6 answer under a $1 ceiling used to become
+                # $12 inside a single complete().
+                self._check_budget(ctx)
                 attempt += 1
                 response = self.client.complete(req, route)
                 span.attribute(response.usage)

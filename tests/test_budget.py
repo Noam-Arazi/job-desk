@@ -59,3 +59,50 @@ def test_remaining_shrinks_as_the_run_spends(make_ctx):
     before = ctx.gateway.remaining()
     run(demo_plan(), AGENTS, ctx)
     assert ctx.gateway.remaining() < before
+
+
+def test_the_schema_retry_is_checked_against_the_ceiling_too() -> None:
+    """One call over budget must not become two.
+
+    The ceiling used to be checked once, before the loop, against a tally that
+    was still empty. A first answer that failed schema validation then bought a
+    second billable call with nothing in the way — so a run with a $1.00 ceiling
+    could spend $12.00 inside a single complete().
+    """
+    from desk.hooks import HookBus, TraceHook
+    from desk.llm.base import LLMRequest, LLMResponse
+    from desk.llm.gateway import Gateway
+    from desk.trace import FrozenClock, Tracer, Usage
+
+    calls: list[int] = []
+
+    class Overspending:
+        name = "overspending"
+
+        def complete(self, req, route):
+            calls.append(1)
+            return LLMResponse(
+                text="not json at all",
+                usage=Usage(input_tokens=1_000_000, output_tokens=1_000_000, cost_usd=6.00),
+                model=route.model,
+                stage=req.stage,
+            )
+
+    tracer = Tracer(run_id="budget-retry", path=None, clock=FrozenClock())
+    hooks = HookBus()
+    hooks.add(TraceHook(tracer))
+    gateway = Gateway(
+        client=Overspending(), tracer=tracer, hooks=hooks, budget_usd=1.00, max_schema_retries=2
+    )
+
+    request = LLMRequest(
+        stage="normalize_posting",
+        system="",
+        user="x",
+        schema={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+
+    with pytest.raises(BudgetExceeded):
+        gateway.complete(request, ctx=None)
+
+    assert calls == [1], "the retry must not be issued once the ceiling is already crossed"

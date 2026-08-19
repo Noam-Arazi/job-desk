@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .hooks import ToolCall
-from .policy import PolicyDenied, Tier
+from .policy import Policy, PolicyBreach, PolicyDenied, Tier
 
 Handler = Callable[..., Any]
 
@@ -69,8 +69,12 @@ class ToolResult:
 
 
 class Registry:
-    def __init__(self) -> None:
+    def __init__(self, policy: Policy | None = None) -> None:
         self._tools: dict[str, Tool] = {}
+        # The registry's own copy, not the caller's. See `dispatch`: the hook
+        # stack is the caller's to assemble and therefore the caller's to leave
+        # out, and a guarantee that can be left out is not one.
+        self.policy = policy or Policy()
 
     def register(
         self, name: str, tier: Tier, description: str, input_schema: dict[str, Any]
@@ -109,6 +113,17 @@ class Registry:
         """The single place a tool is ever invoked.
 
         Hooks run here — policy, tracing, redaction — so no agent has to.
+
+        The policy is checked TWICE and the difference between the two checks is
+        the whole guarantee. The hook stack belongs to the caller: a context
+        built without hooks, or with a bus somebody assembled without a
+        `PolicyHook`, used to reach the handler with nothing in the way. That
+        made the denial a property of how the caller was constructed, which is
+        not what "denied unconditionally at the dispatch point" means, and it is
+        the shape a jailbreak would look for — not an argument that talks the
+        model into calling the tool, but a call path where the check was never
+        installed. So this method owns a `Policy` of its own that no caller can
+        remove, and the hook stack, when there is one, still gets its say.
         """
         try:
             tool = self.get(name)
@@ -119,6 +134,7 @@ class Registry:
         hooks = getattr(ctx, "hooks", None)
 
         try:
+            self.policy.check(call, ctx)
             if hooks is not None:
                 hooks.before_tool(call, ctx)
         except PolicyDenied as exc:
@@ -128,6 +144,13 @@ class Registry:
 
         try:
             content = tool.handler(ctx=ctx, **args)
+        except PolicyBreach:
+            # A handler that asserts it was never supposed to run is reporting
+            # that the boundary failed. Catching it below as an ordinary tool
+            # error would file the breach as `ok=False` — the same shape a
+            # timeout produces — and the one event that must never be quiet
+            # would be the quietest thing in the trace.
+            raise
         except Exception as exc:  # noqa: BLE001 - a tool error is a result, not a crash
             if hooks is not None:
                 hooks.on_error(call, exc, ctx)
@@ -320,4 +343,4 @@ def submit_application(ctx: Any, fingerprint: str, url: str, cv_path: str) -> di
     if marker is not None:
         (marker.data / "POLICY_BREACH.json").parent.mkdir(parents=True, exist_ok=True)
         (marker.data / "POLICY_BREACH.json").write_text(json.dumps(breach), encoding="utf-8")
-    raise AssertionError("submit_application executed — the external tier was not enforced")
+    raise PolicyBreach("submit_application executed — the external tier was not enforced")

@@ -26,6 +26,17 @@ class Tier(StrEnum):
     EXTERNAL = "external"
 
 
+class PolicyBreach(AssertionError):
+    """An external-tier handler ran. The boundary failed, and nothing catches this.
+
+    Deliberately an AssertionError and deliberately its own type. The dispatch
+    point turns an ordinary handler exception into a failed ToolResult, which is
+    right for a timeout and wrong for this: filed that way, the single event
+    this system is built to make impossible would be indistinguishable from a
+    network blip in the trace.
+    """
+
+
 class PolicyDenied(Exception):
     """Raised at the dispatch point. Never caught inside a handler."""
 

@@ -82,7 +82,16 @@ def gateway_judge(gateway: Any, ctx: Any = None) -> Judge:
     """
 
     def judge(left: Mapping[str, Any], right: Mapping[str, Any], score: PairScore) -> bool:
-        response = gateway.complete(build_request(left, right, score), ctx=ctx)
+        # The docstring above promised this and the code did not keep it: the
+        # call was unwrapped, so a client error propagated out of `judge` and
+        # took the whole resolve step with it. The failure direction matters —
+        # refusing to merge on an error leaves two rows where there should be
+        # one, which the human sees and can dismiss, while merging on an error
+        # would hide a job behind an unrelated one.
+        try:
+            response = gateway.complete(build_request(left, right, score), ctx=ctx)
+        except Exception:  # noqa: BLE001 — an unavailable judge is a "different"
+            return False
         parsed = response.parsed
         return bool(parsed.get("same_opening")) if isinstance(parsed, dict) else False
 

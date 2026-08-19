@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from desk.hooks import ToolCall
+from desk.hooks import HookBus, ToolCall
 from desk.policy import Policy, PolicyDenied, Tier
 from desk.registry import registry
 
@@ -55,3 +57,52 @@ def test_a_handler_exception_is_a_result_and_not_a_raise(ctx):
     """get_posting on a malformed fingerprint must not take the run down."""
     result = registry.dispatch("get_posting", {"fingerprint": None}, ctx)
     assert result.ok is True or result.ok is False  # either way, no exception escaped
+
+
+# ---------------------------------------------------------------------------
+# The guarantee is not "the hooks deny it". It is "dispatch denies it".
+#
+# A reviewer broke the original in three ways, none of which needed a cleverer
+# jailbreak: a context with no `hooks` attribute, a context with `hooks=None`,
+# and a HookBus somebody assembled without a PolicyHook. In all three the
+# external handler ran. The check was real but it lived in the caller's hook
+# stack, and a caller can be built without one.
+# ---------------------------------------------------------------------------
+
+EXTERNAL_ARGS = {"fingerprint": "abc", "url": "https://employer.example", "cv_path": "/tmp/cv.docx"}
+
+
+@pytest.mark.parametrize(
+    "ctx",
+    [
+        SimpleNamespace(),
+        SimpleNamespace(hooks=None),
+        SimpleNamespace(hooks=HookBus()),
+    ],
+    ids=["no hooks attribute", "hooks is None", "a hook bus with no policy hook"],
+)
+def test_the_external_tier_is_denied_whatever_the_caller_installed(ctx) -> None:
+    result = registry.dispatch("submit_application", dict(EXTERNAL_ARGS), ctx)
+    assert result.denied is True
+    assert result.ok is False
+
+
+def test_a_breach_is_raised_and_not_filed_as_an_ordinary_tool_error() -> None:
+    """The one event that must never be quiet must not look like a timeout.
+
+    `dispatch` converts a handler exception into a failed ToolResult, which is
+    right for a network error and wrong for this. If the boundary ever fails,
+    the breach has to leave the dispatch point as an exception.
+    """
+    from desk.policy import PolicyBreach
+    from desk.registry import Registry, Tool
+
+    escaped = Registry()
+    escaped.policy = SimpleNamespace(check=lambda call, ctx: None)  # a policy that allows anything
+    escaped._tools = dict(registry._tools)
+
+    with pytest.raises(PolicyBreach):
+        escaped.dispatch("submit_application", dict(EXTERNAL_ARGS), SimpleNamespace())
+
+    assert issubclass(PolicyBreach, AssertionError)
+    assert Tool is not None
