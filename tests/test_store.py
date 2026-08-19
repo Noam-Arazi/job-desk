@@ -134,3 +134,69 @@ def test_a_store_written_before_that_column_existed_still_opens() -> None:
         )
         assert store.all_postings()[0]["stated_experience"] == "3-5 שנים"
         store.close()
+
+
+def _linked(store: Store) -> tuple[str, str]:
+    """Two rows for one role, merged by the resolver, as happens across boards."""
+    left = Posting(site="alljobs", external_id="1", title="אנליסט/ית", company="סונול",
+                   location="נתניה", posted_at="2026-08-18T09:00:00")
+    right = Posting(site="drushim", external_id="2", title="דרוש/ה אנליסט/ית", company="",
+                    location="נתניה", posted_at="2026-08-17T09:00:00")
+    store.upsert_posting(left, now="2026-08-18T10:00:00")
+    store.upsert_posting(right, now="2026-08-18T10:00:00")
+    store.record_link(left.fingerprint, right.fingerprint, score=0.9, band="duplicate",
+                      method="content", now="2026-08-18T10:00:00")
+    return left.fingerprint, right.fingerprint
+
+
+def test_applying_through_one_board_blocks_the_role_on_the_other() -> None:
+    """The resolver merged them, so they are one job — and one application.
+
+    Keyed on the raw fingerprint, the blocklist knew only the board the human
+    happened to apply through, and offered the same role back the next morning
+    under its twin. That is precisely the failure the resolver exists to
+    prevent.
+    """
+    store = Store()
+    left, right = _linked(store)
+    store.mark_applied(left, now="2026-08-18T11:00:00")
+
+    assert store.has_applied(left) is True
+    assert store.has_applied(right) is True
+    assert [row["fingerprint"] for row in store.unseen_postings()] == []
+    store.close()
+
+
+def test_unseen_postings_is_newest_by_the_date_the_board_printed() -> None:
+    """"Newest first" ordered by rowid, which is crawl order and not time."""
+    store = Store()
+    for index, (external, posted) in enumerate(
+        [("a", "2026-08-01T09:00:00"), ("b", "2026-08-18T09:00:00"), ("c", "2026-08-10T09:00:00")]
+    ):
+        store.upsert_posting(
+            Posting(site="alljobs", external_id=external, title=f"role {index}",
+                    company=f"company {index}", posted_at=posted),
+            now="2026-08-18T10:00:00",
+        )
+    assert [row["external_id"] for row in store.unseen_postings(2)] == ["b", "c"]
+    store.close()
+
+
+def test_one_role_is_analysed_once_however_many_boards_carry_it() -> None:
+    """Two rows, one fingerprint: the second analysis buys nothing and costs a
+    full extract-and-score chain at judgment tier."""
+    store = Store()
+    store.upsert_posting(
+        Posting(site="alljobs", external_id="1", title="אנליסט/ית", company="סונול",
+                location="נתניה", posted_at="2026-08-18T09:00:00"),
+        now="2026-08-18T10:00:00",
+    )
+    store.upsert_posting(
+        Posting(site="drushim", external_id="2", title="אנליסט/ית", company="סונול",
+                location="נתניה", posted_at=""),
+        now="2026-08-18T10:00:00",
+    )
+    rows = store.unanalysed_postings()
+    assert len(rows) == 1
+    assert rows[0]["site"] == "alljobs", "the copy that carries a date wins"
+    store.close()

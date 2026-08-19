@@ -312,19 +312,37 @@ class Store:
         return [dict(r) for r in rows]
 
     def unseen_postings(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Distinct roles that have not been applied to, newest first."""
+        """Distinct roles that have not been applied to, newest first.
+
+        Two corrections that used to be missing, both of which showed the human
+        the same job twice.
+
+        "Newest first" was ordered by rowid, which is insertion order, which is
+        crawl order — so a limit returned whatever the scraper happened to store
+        last and silently dropped fresher postings. It now orders by the date
+        the board printed, falling back to when it was fetched.
+
+        And "applied to" is asked of the whole cluster. The resolver merges the
+        same role across boards; applying through one board and then being
+        offered the other one tomorrow is precisely the failure the resolver
+        exists to prevent, and keying the blocklist on the raw fingerprint
+        walked straight into it.
+        """
         rows = self.conn.execute(
             """
             SELECT p.* FROM postings p
             JOIN (SELECT fingerprint, MIN(id) AS id FROM postings GROUP BY fingerprint) d
               ON d.id = p.id
-            WHERE p.fingerprint NOT IN (SELECT fingerprint FROM applications)
-            ORDER BY p.id DESC
-            LIMIT ?
-            """,
-            (limit,),
+            ORDER BY COALESCE(p.posted_at, p.fetched_at) DESC
+            """
         ).fetchall()
-        return [dict(r) for r in rows]
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            if len(out) >= limit:
+                break
+            if not self.has_applied(str(row["fingerprint"])):
+                out.append(dict(row))
+        return out
 
     # -- the applied blocklist -------------------------------------------
 
@@ -339,8 +357,19 @@ class Store:
             )
 
     def has_applied(self, fingerprint: str) -> bool:
+        """Whether this role was applied to, under any of its fingerprints.
+
+        Asked of the cluster and not of the one row, for the same reason
+        `cluster_first_seen` reads the cluster: after the resolver links the
+        alljobs and the gotfriends copy of a role, they are one job, and the
+        blocklist that only knows the fingerprint the human happened to apply
+        through offers the other copy back the next morning.
+        """
+        group = self.merged_with(fingerprint)
+        placeholders = ",".join("?" for _ in group)
         row = self.conn.execute(
-            "SELECT 1 FROM applications WHERE fingerprint = ?", (fingerprint,)
+            f"SELECT 1 FROM applications WHERE fingerprint IN ({placeholders})",
+            tuple(group),
         ).fetchone()
         return row is not None
 
@@ -542,10 +571,24 @@ class Store:
             "SELECT p.* FROM postings p"
             " LEFT JOIN analyses a ON a.fingerprint = p.fingerprint"
             " WHERE a.fingerprint IS NULL"
-            " ORDER BY COALESCE(p.posted_at, p.fetched_at) DESC LIMIT ?",
-            (limit,),
+            " ORDER BY COALESCE(p.posted_at, p.fetched_at) DESC",
         ).fetchall()
-        return [dict(r) for r in rows]
+        # One row per fingerprint, and the ordering above decides which one
+        # survives: a board that prints a date wins over one that does not.
+        # Returning both copies meant `desk analyze --all` paid for a full
+        # extract-and-score chain twice on the same role and stored the second
+        # answer over the first — 72 of them in the live store.
+        seen: set[str] = set()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            if len(out) >= limit:
+                break
+            fingerprint = str(row["fingerprint"])
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            out.append(dict(row))
+        return out
 
     # -- where each posting stands ----------------------------------------
 
