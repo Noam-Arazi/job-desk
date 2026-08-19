@@ -25,6 +25,7 @@ nothing.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -41,6 +42,18 @@ UNSAFE = re.compile(r"[\\/:*?\"<>|\n\r\t]+")
 FOLDER_PLACEHOLDER = "<posting folder>"
 
 
+class UnsafeOutputPath(ValueError):
+    """The document would land outside the folder the contract names."""
+
+
+class OutputExists(FileExistsError):
+    """A document is already there. Noam edits these in Word — see `write`."""
+
+
+class BaseMismatch(ValueError):
+    """The paragraph does not say what the change says it says."""
+
+
 @dataclass(frozen=True)
 class Rendered:
     path: Path
@@ -50,10 +63,33 @@ class Rendered:
 
 
 def folder_name(*, company: str = "", title: str = "", fingerprint: str = "") -> str:
-    """Name the folder the way Noam's existing posting folders are named."""
+    """Name the folder the way Noam's existing posting folders are named.
+
+    `company` and `title` are scraped from a posting, which makes them
+    attacker-controlled text on its way to a filesystem path. Stripping the
+    separators is not enough: "." and ".." are legal filenames that name a
+    directory rather than a new one, and a posting called "." would have put
+    the CV straight into ~/Desktop/קורות חיים/ next to the bases and the
+    experience inventory. A name that is nothing but dots, or that starts with
+    one, is therefore not a folder name at all and the fingerprint is used.
+    """
+    def clean(raw: str) -> str:
+        return UNSAFE.sub(" ", raw).strip()[:96].strip()
+
     parts = [p.strip() for p in (company, title) if p and p.strip()]
-    name = " - ".join(parts) or (fingerprint[:12] if fingerprint else "posting")
-    return UNSAFE.sub(" ", name).strip()[:96]
+    name = clean(" - ".join(parts))
+    if not name or name.startswith("."):
+        name = clean(fingerprint[:12])
+    return name if name and not name.startswith(".") else "posting"
+
+
+def output_root(contract: Mapping[str, Any], *, root: Path | str | None = None) -> Path:
+    """The directory every tailored document must stay inside."""
+    if root is not None:
+        return Path(root).expanduser()
+    template = str(contract.get("review", {}).get("output", {}).get("dir", "~/Desktop/"))
+    head = template.split(FOLDER_PLACEHOLDER)[0] if FOLDER_PLACEHOLDER in template else template
+    return Path(head).expanduser()
 
 
 def output_path(
@@ -64,31 +100,51 @@ def output_path(
     fingerprint: str = "",
     root: Path | str | None = None,
 ) -> Path:
-    """Where the document goes, per `review.output` in the contract."""
+    """Where the document goes, per `review.output` in the contract.
+
+    The result is asserted to sit under the configured root before it is
+    returned, so a folder name that escaped `folder_name` would still fail
+    here rather than silently write somewhere else.
+    """
     output = contract.get("review", {}).get("output", {})
     template = str(output.get("dir", "~/Desktop/"))
     filename = str(output.get("filename", "cv.docx"))
     folder = folder_name(company=company, title=title, fingerprint=fingerprint)
 
-    if root is not None:
-        directory = Path(root).expanduser() / folder
+    base_dir = output_root(contract, root=root)
+    if root is None and FOLDER_PLACEHOLDER not in template:
+        directory = base_dir
     else:
-        directory = Path(template.replace(FOLDER_PLACEHOLDER, folder)).expanduser()
-    return directory / filename
+        directory = base_dir / folder
+    path = directory / filename
+
+    if not path.resolve().is_relative_to(base_dir.resolve()):
+        raise UnsafeOutputPath(f"{path} is outside {base_dir}")
+    return path
 
 
 def _set_text(paragraph: Any, before: str, after: str) -> None:
-    """Replace a paragraph's text, keeping as much run formatting as possible."""
+    """Replace a paragraph's text, keeping as much run formatting as possible.
+
+    The two escape hatches this used to have both ended in "collapse the whole
+    paragraph into run 0", which is precisely the flattening the localised swap
+    exists to avoid: a skills line whose bold category and plain items are two
+    runs came back entirely bold. So neither case is written through any more.
+    A change that says nothing (`before == after`) is not applied at all, and a
+    paragraph that does not say what `before` says it says means the base moved
+    under the changeset — the run stops there rather than overwriting a line
+    nobody checked.
+    """
+    if before == after:
+        return
     runs = list(paragraph.runs)
     if not runs:
         paragraph.text = after
         return
-    if paragraph.text != before or before == after:
-        # The base moved under the changeset, or there is nothing to localise.
-        runs[0].text = after
-        for run in runs[1:]:
-            run.text = ""
-        return
+    if paragraph.text != before:
+        raise BaseMismatch(
+            f"the paragraph says {paragraph.text!r}, the change says it says {before!r}"
+        )
 
     head = 0
     limit = min(len(before), len(after))
@@ -130,7 +186,10 @@ def apply(base: Base, changeset: ChangeSet) -> Rendered:
     changed = removed = reordered = 0
 
     for change in changeset.changes:
-        if change.is_reorder or change.removes_line:
+        # `edits_text` is the projection's own dispatch, imported rather than
+        # re-derived. When the two disagreed, a document-level check that read
+        # the projection was blind to what this loop wrote.
+        if not change.edits_text or change.before == change.after:
             continue
         paragraph = by_address.get(change.section)
         if paragraph is None:
@@ -165,12 +224,37 @@ def apply(base: Base, changeset: ChangeSet) -> Rendered:
     return Rendered(path=base.path, changed=changed, removed=removed, reordered=reordered)
 
 
-def write(base: Base, changeset: ChangeSet, path: Path | str) -> Rendered:
-    """Apply and save. Called only on `--write`; the default run never gets here."""
-    result = apply(base, changeset)
+def write(base: Base, changeset: ChangeSet, path: Path | str, *, force: bool = False) -> Rendered:
+    """Apply and save. Called only on `--write`; the default run never gets here.
+
+    Two rules about the destination, both of them consequences of `format:
+    docx` in the contract — the whole reason the output is Word is that Noam
+    edits it by hand afterwards and then sends it.
+
+    An existing file is never overwritten without `--force`. A second `desk
+    tailor --write` on the same posting used to silently destroy an evening of
+    his edits, with no prompt and no backup, which is a worse outcome than the
+    run failing.
+
+    And the save is atomic: the document is written to a temporary file beside
+    the destination and moved onto it with `os.replace`. A save that fails
+    halfway then leaves the previous document intact instead of a truncated
+    .docx that Word will not open.
+    """
     destination = Path(path).expanduser()
+    if destination.exists() and not force:
+        raise OutputExists(
+            f"{destination} already exists; you edit these in Word, so it is not "
+            "overwritten. Re-run with --force to replace it."
+        )
+    result = apply(base, changeset)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    base.document.save(str(destination))
+    staging = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    try:
+        base.document.save(str(staging))
+        os.replace(staging, destination)
+    finally:
+        staging.unlink(missing_ok=True)
     return Rendered(
         path=destination,
         changed=result.changed,

@@ -62,6 +62,13 @@ AI_ASSISTED = re.compile(r"\bai[\s\-_‐-―]*assisted\b")
 MAKE = re.compile(r"\bmake\b|מייק")
 VERTEX = re.compile(r"\bvertex\b|ורטקס")
 
+# A control character in `after` is not a character, it is a layout decision.
+# A newline in particular becomes a real second line in the .docx — a new
+# bullet by any other name — while every check here counts the string as one
+# line. U+2028 and U+2029 are Word line and paragraph separators and do the
+# same thing.
+CONTROL = re.compile("[\\x00-\\x1f\\x7f\\u2028\\u2029]")
+
 
 class ContractError(Exception):
     """The changeset broke the contract. Carries every violation, not the first."""
@@ -153,13 +160,24 @@ def locate_anchors(base: Base, contract: Mapping[str, Any]) -> tuple[Anchor, ...
     failing the run over it would be this code overruling the file it is
     supposed to serve. What is *not* forgiving is an anchor that was located
     and then dropped, moved or weakened; that is a violation below.
+
+    The search is confined to the anchor's own employer. `employer:` is part of
+    the anchor in the contract — "managed the directorate's data layer" is a
+    claim about the Growth Directorate and nowhere else — and a locator that
+    ignored it would bind the anchor to whichever bullet in the document
+    happened to share its vocabulary. That failure is silent and it inverts the
+    guarantee: the anchor reports itself protected on a Fischer line while the
+    real Growth bullet can be dropped with no violation at all.
     """
     found: list[Anchor] = []
     for entry in contract.get("anchors", ()):
         claim_texts = [entry.get(base.language) or "", entry.get("claim") or ""]
+        employer = str(entry.get("employer", ""))
         best_address, best_score = "", 0.0
         for line in base.lines:
             if line.kind != BULLET:
+                continue
+            if line.employer != employer:
                 continue
             for claim in claim_texts:
                 wanted = tokens(claim)
@@ -173,7 +191,7 @@ def locate_anchors(base: Base, contract: Mapping[str, Any]) -> tuple[Anchor, ...
         found.append(
             Anchor(
                 id=str(entry.get("id", "")),
-                employer=str(entry.get("employer", "")),
+                employer=employer,
                 position=str(entry.get("position", "any_bullet")),
                 claim=claim_texts[0] or claim_texts[1],
                 address=best_address,
@@ -251,7 +269,22 @@ def _add_new_bullet(s: Subject) -> Iterator[Violation]:
                 "add_new_bullet", change.section, "names a line that is not in the base"
             )
             continue
-        if change.is_reorder or change.removes_line:
+        if change.is_reorder:
+            continue
+        # A newline inside `after` is a new line in the document — python-docx
+        # writes it as a <w:br/> and Word renders a second bullet — while every
+        # check in this file, `exceed_one_page` included, measures the string as
+        # one. Nothing legitimate needs a control character in a CV line, so the
+        # cheap rule is the right one: none of them may appear.
+        control = CONTROL.search(change.after)
+        if control:
+            yield Violation(
+                "add_new_bullet",
+                change.section,
+                f"`after` carries the control character {control.group()!r}, "
+                "which becomes a new line in the document",
+            )
+        if change.removes_line:
             continue
         if not change.before.strip():
             yield Violation("add_new_bullet", change.section, "an empty `before` is a new line")
@@ -375,6 +408,7 @@ def _claim_without_evidence(s: Subject) -> Iterator[Violation]:
     sources = tuple(evidence.get("sources", ("base", "inventory")))
     needs_quote = tuple(evidence.get("required_for", ()))
     for change in s.changeset.changes:
+        yield from _before_is_the_base_line(s, change)
         if change.source not in sources:
             yield Violation(
                 "claim_without_evidence",
@@ -385,6 +419,34 @@ def _claim_without_evidence(s: Subject) -> Iterator[Violation]:
             yield Violation(
                 "claim_without_evidence", change.section, f"{change.op} quotes no source line"
             )
+
+
+def _before_is_the_base_line(s: Subject, change: Change) -> Iterator[Violation]:
+    """`before` is the base's own line, byte for byte, or it is not evidence.
+
+    This is the hinge the whole file turns on and it was missing. Four rules
+    here — `fischer_adoption_claim`, `attribute_make_to_fischer`,
+    `vertex_on_fischer` and `scope_unchanged` — are diffs of `before` against
+    `after`, and the projection applies `after` whatever `before` said. A
+    change free to invent its own `before` therefore chooses what those four
+    rules compare against: declare that the Fischer line already said "in
+    production", or already said "led", and the escalation reads as
+    pre-existing and ships. `evidence.record_per_change` names `before` as one
+    of the six things a change must record, and a recorded value that does not
+    match the document it claims to quote is an unsourced change, which
+    `unsourced_change: reject` says fails the run.
+    """
+    if change.is_reorder:
+        return
+    line = s.base.line(change.section)
+    if line is None:
+        return  # `add_new_bullet` already reported an address the base lacks
+    if change.before != line.text:
+        yield Violation(
+            "claim_without_evidence",
+            change.section,
+            f"`before` is not the base line: the base says {line.text!r}",
+        )
 
 
 @check_for("fischer_adoption_claim")
@@ -448,9 +510,35 @@ def _touch_identity_block(s: Subject) -> Iterator[Violation]:
     Stated as an allowlist rather than a blocklist: the only line kinds a
     change may name are a skills line and a bullet. Anything the parser did not
     recognise therefore lands on the safe side by default.
+
+    A reorder is held to the same allowlist, one level down. It names addresses
+    rather than one line, and those addresses were never kind-checked: a
+    reorder over `identity.0, identity.1` passed every rule here and put the
+    contact line above the name in the written document. The two allowed
+    reorders are `reorder_skill_categories` and `reorder_lines_within_section`,
+    so every address in one must be a skills line or a bullet, and must belong
+    to the group the change itself names — a reorder cannot reach across
+    employers any more than it can reach into the education block.
     """
     for change in s.changeset.changes:
         if change.is_reorder:
+            for address in dict.fromkeys(change.order_before() + change.order_after()):
+                moved = s.base.line(address)
+                if moved is None:
+                    continue  # `allowed` already reports a non-permutation
+                if moved.kind not in (SKILL, BULLET):
+                    kind = "the summary" if moved.kind == SUMMARY else f"a {moved.kind} line"
+                    yield Violation(
+                        "touch_identity_block",
+                        address,
+                        f"{kind} is structural and is not reordered",
+                    )
+                elif moved.group != change.section:
+                    yield Violation(
+                        "touch_identity_block",
+                        address,
+                        f"belongs to {moved.group!r}, not to the reordered {change.section!r}",
+                    )
             continue
         line = s.base.line(change.section)
         if line is None:
@@ -477,6 +565,16 @@ def _unknown_operations(s: Subject) -> Iterator[Violation]:
                 "allowed", change.section, f"{change.op!r} is not one of {list(permitted)}"
             )
         if change.op == "drop_secondary_bullet":
+            if change.after.strip():
+                # `drop_secondary_bullet` removes a bullet; there is no such
+                # thing as dropping it into replacement text. The projection
+                # reads it as a removal and would ignore the text, so a
+                # non-empty `after` is a change no document-level check sees.
+                yield Violation(
+                    "allowed",
+                    change.section,
+                    "a dropped bullet may not carry replacement text in `after`",
+                )
             line = s.base.line(change.section)
             if line is not None and line.kind != BULLET:
                 yield Violation("allowed", change.section, "drop_secondary_bullet needs a bullet")

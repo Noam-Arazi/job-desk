@@ -94,7 +94,16 @@ def cmd_tailor(args: argparse.Namespace) -> int:
         title=str(posting.get("title") or analysis.title),
         fingerprint=analysis.fingerprint,
     )
-    written = render.write(base, result.changeset, path)
+    # `--force` is the answer to "may this overwrite the document you have been
+    # editing in Word", so its absence means no, not "assume yes".
+    try:
+        written = render.write(
+            base, result.changeset, path, force=bool(getattr(args, "force", False))
+        )
+    except render.OutputExists as exc:
+        print("")
+        print(f"NOT WRITTEN  {exc}")
+        return _done(store, ctx, 1)
     store.put_tailored(
         analysis.fingerprint,
         family=base.family,

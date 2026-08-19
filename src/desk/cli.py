@@ -517,6 +517,11 @@ def build_parser() -> argparse.ArgumentParser:
     tailor.add_argument("--engine", choices=ENGINES, default="replay")
     tailor.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")
     tailor.add_argument("--write", action="store_true", help="write the document to disk")
+    tailor.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing document; without it an existing file is left alone",
+    )
     tailor.add_argument("--language", choices=("he", "en"), default=None)
     tailor.set_defaults(func=cmd_tailor)
 

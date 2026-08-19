@@ -51,6 +51,20 @@ def _bold(document: Any, text: str) -> None:
     paragraph.add_run(text).bold = True
 
 
+def _skills_line(document: Any, text: str) -> None:
+    """A skills line the way the approved bases carry it: two runs, not one.
+
+    The bold category and the plain items are separate runs, which is the whole
+    reason `render._set_text` localises an edit instead of rewriting the
+    paragraph. Built as a single run, this line would survive total flattening
+    unchanged and every test about run formatting would hold vacuously.
+    """
+    head, _, items = text.partition(": ")
+    paragraph = document.add_paragraph()
+    paragraph.add_run(f"{head}: ").bold = True
+    paragraph.add_run(items)
+
+
 def make_base_file(directory: Path, name: str = "Noam_Arazi_CV_AI_Builder_base.docx") -> Path:
     """A synthetic .docx with the same shape as an approved base.
 
@@ -65,7 +79,7 @@ def make_base_file(directory: Path, name: str = "Noam_Arazi_CV_AI_Builder_base.d
     document.add_paragraph(SUMMARY_TEXT)
     _bold(document, "Technical Skills")
     for line in (SKILL_DATA, SKILL_TOOLS, SKILL_CLOUD):
-        _bold(document, line)
+        _skills_line(document, line)
     _bold(document, "Experience")
     _bold(document, "Growth Directorate  |  2024 - 2026")
     document.add_paragraph("Information systems")
@@ -201,6 +215,8 @@ def test_the_base_is_re_read_and_re_hashed_every_run(bases_dir):
     for paragraph in edited.paragraphs:
         if paragraph.text == SKILL_DATA:
             paragraph.runs[0].text = "Data: sql, python, duckdb"
+            for run in paragraph.runs[1:]:
+                run.text = ""
     edited.save(str(first.path))
 
     second = bases.load_for("ai_builder", directory=bases_dir)
@@ -214,6 +230,50 @@ def test_every_anchor_is_located_in_the_base(base):
     assert located["growth_data_layer"] == "exp.0.bullet.0"
     assert located["growth_analyst_team"] == "exp.0.bullet.1"
     assert located["fischer_ai_solutions"] == "exp.1.bullet.0"
+
+
+def make_confusable_base(directory: Path) -> Path:
+    """A base where another employer's bullet is the best match for an anchor.
+
+    Noam reworded the Growth bullet by hand, and the Fischer section happens to
+    describe the same kind of work. Nothing here is malformed; the file is
+    exactly the sort of thing hand-editing produces.
+    """
+    document = Document()
+    _bold(document, "Test Person")
+    document.add_paragraph("Haifa | test@example.com")
+    _bold(document, "Summary")
+    document.add_paragraph(SUMMARY_TEXT)
+    _bold(document, "Technical Skills")
+    _skills_line(document, SKILL_DATA)
+    _bold(document, "Experience")
+    _bold(document, "Growth Directorate  |  2024 - 2026")
+    document.add_paragraph("Information systems")
+    document.add_paragraph("Ran the weekly reporting flow", style="List Bullet")
+    _bold(document, "Fischer Technologies  |  2025 - 2026")
+    document.add_paragraph("AI solutions")
+    document.add_paragraph(
+        ANCHORS["growth_data_layer"]["en"] + " for one client", style="List Bullet"
+    )
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "Noam_Arazi_CV_AI_Builder_base.docx"
+    document.save(str(path))
+    return path
+
+
+def test_an_anchor_binds_only_to_a_line_of_its_own_employer(tmp_path):
+    """`employer:` is part of the anchor, and the locator ignored it.
+
+    An anchor bound to another employer's bullet reports itself protected while
+    the real line it names is free to be dropped — the guarantee inverted.
+    """
+    base = bases.load(make_confusable_base(tmp_path / "bases"))
+    growth = {a.id: a for a in ct.locate_anchors(base, CONTRACT)}["growth_data_layer"]
+
+    assert growth.employer == "growth_directorate"
+    assert base.employer_of("exp.1.bullet.0") == "fischer_technologies"
+    assert growth.address != "exp.1.bullet.0", "the anchor bound to another employer's line"
+    assert not growth.located, "this base no longer phrases the claim; nothing here is protected"
 
 
 # --- projecting a changeset ----------------------------------------------
@@ -596,6 +656,106 @@ def test_a_forbidden_rule_with_no_checker_fails_the_run(base):
     assert "no_emoji" in rules
 
 
+@pytest.mark.parametrize(
+    ("case", "rule_id"),
+    [
+        (
+            {
+                "section": "exp.1.bullet.1",
+                "before": "Built a prototype in production for one client",
+                "after": "Built a retrieval prototype in production for one client",
+            },
+            "fischer_adoption_claim",
+        ),
+        (
+            {
+                "section": "exp.1.bullet.1",
+                "before": BULLET_PROTOTYPE + " with Make",
+                "after": BULLET_PROTOTYPE + " with Make",
+            },
+            "attribute_make_to_fischer",
+        ),
+        (
+            {
+                "section": "exp.1.bullet.1",
+                "before": BULLET_PROTOTYPE + " on Vertex AI",
+                "after": BULLET_PROTOTYPE + " on Vertex AI",
+            },
+            "vertex_on_fischer",
+        ),
+        (
+            {
+                "section": "exp.0.bullet.2",
+                "before": "Led the weekly review dashboards",
+                "after": "Led the weekly review dashboards end to end",
+            },
+            "scope_unchanged",
+        ),
+    ],
+)
+def test_a_change_may_not_invent_the_before_it_is_judged_against(base, case, rule_id):
+    """Four rules are diffs of `before` against `after`, and nothing checked `before`.
+
+    A change that writes its own `before` chooses what those four rules compare
+    against — declare the Fischer line already said "in production" and the
+    production claim reads as pre-existing — while the projection applies
+    `after` regardless. `before` is evidence, so it is the base's line or the
+    change is unsourced.
+    """
+    caught = violations_of(base, change(**case))
+    assert "claim_without_evidence" in caught, f"a false `before` also defeated {rule_id}"
+    assert base.line(case["section"]).text != case["before"]
+
+
+def test_a_dropped_bullet_may_not_carry_replacement_text(base, tmp_path):
+    """The projection read it as a removal, the renderer wrote the text anyway."""
+    sneak = change(
+        op=cs.DROP_SECONDARY_BULLET,
+        section="exp.1.bullet.1",
+        before=BULLET_PROTOTYPE,
+        after="Built a retrieval prototype, in production, adopted by the client",
+    )
+    assert "allowed" in violations_of(base, sneak)
+
+    out = tmp_path / "out" / "cv.docx"
+    render.write(base, cs.ChangeSet(changes=(sneak,)), out)
+    again = bases.load(out)
+    assert again.line("exp.1.bullet.1").text == BULLET_PROTOTYPE
+    assert cs.project(base, cs.ChangeSet(changes=(sneak,))).of("exp.1.bullet.1") == BULLET_PROTOTYPE
+
+
+@pytest.mark.parametrize(
+    ("section", "before", "after"),
+    [
+        ("skills", "identity.0, identity.1", "identity.1, identity.0"),
+        ("exp.0", "exp.0.header, exp.1.header", "exp.1.header, exp.0.header"),
+        ("skills", "skills.0, structural.0", "structural.0, skills.0"),
+        ("exp.0", "exp.0.bullet.0, exp.1.bullet.0", "exp.1.bullet.0, exp.0.bullet.0"),
+    ],
+)
+def test_a_reorder_may_not_move_anything_but_its_own_skills_and_bullets(
+    base, section, before, after
+):
+    """A reorder was exempt from `touch_identity_block` and its addresses were never checked."""
+    assert "touch_identity_block" in violations_of(
+        base,
+        change(op=cs.REORDER_LINES_WITHIN_SECTION, section=section, before=before, after=after),
+    )
+
+
+@pytest.mark.parametrize("control", ["\n", "\r", "\t", "\v", "\u2028"])
+def test_a_control_character_in_after_is_a_new_line_and_is_rejected(base, control):
+    """A newline in `after` is a real second line in the .docx that every check counts as one."""
+    assert "add_new_bullet" in violations_of(
+        base,
+        change(
+            section="exp.0.bullet.2",
+            before=BULLET_DASHBOARDS,
+            after=f"{BULLET_DASHBOARDS}{control}Owned the agentic orchestration platform",
+        ),
+    )
+
+
 # --- rendering ------------------------------------------------------------
 
 
@@ -650,7 +810,45 @@ def test_rendering_keeps_the_bold_lead_in_of_a_skills_line(base, tmp_path):
     reopened = Document(str(out))
     skills = [p for p in reopened.paragraphs if p.text.startswith("Data:")][0]
     assert skills.text == SKILL_DATA + ", dbt"
-    assert any(run.bold for run in skills.runs), "the base's bold formatting survived the edit"
+    # `any(run.bold ...)` held even under total flattening, because a flattened
+    # paragraph is one bold run. What the localised edit actually promises is
+    # that the bold stayed on the category and did not spread over the items.
+    assert "".join(run.text for run in skills.runs if run.bold) == "Data: "
+
+
+def test_a_change_that_says_nothing_does_not_flatten_the_paragraph(base, tmp_path):
+    """`before == after` used to collapse every run into run 0, bold and all."""
+    out = tmp_path / "out" / "cv.docx"
+    written = render.write(
+        base,
+        cs.ChangeSet(
+            changes=(change(section="skills.0", before=SKILL_DATA, after=SKILL_DATA),)
+        ),
+        out,
+    )
+    assert written.changed == 0, "a change that changes nothing is not applied"
+
+    skills = [p for p in Document(str(out)).paragraphs if p.text.startswith("Data:")][0]
+    assert skills.text == SKILL_DATA
+    assert "".join(run.text for run in skills.runs if run.bold) == "Data: "
+
+
+def test_rendering_refuses_a_paragraph_that_does_not_say_what_before_says(base):
+    """The base moved under the changeset. Rewriting run 0 wrote a line nobody checked."""
+    with pytest.raises(render.BaseMismatch):
+        render.apply(
+            base,
+            cs.ChangeSet(
+                changes=(
+                    change(
+                        section="skills.0",
+                        before="Data: something the base never said",
+                        after="Data: sql, python, dbt",
+                    ),
+                )
+            ),
+        )
+    assert base.document.paragraphs[base.line("skills.0").index].text == SKILL_DATA
 
 
 def test_the_reorder_moves_the_paragraphs_not_only_the_text(base, tmp_path):
@@ -689,6 +887,58 @@ def test_the_filename_never_names_the_role(tmp_path):
 def test_the_output_folder_falls_back_to_the_fingerprint(tmp_path):
     path = render.output_path(CONTRACT, fingerprint="deadbeefcafe0000", root=tmp_path)
     assert path.parent.name == "deadbeefcafe"
+
+
+@pytest.mark.parametrize("company", [".", "..", "...", " . ", ".hidden"])
+def test_a_scraped_company_name_cannot_walk_out_of_the_output_folder(tmp_path, company):
+    """`company` and `title` are scraped, and a folder of "." is not a new folder.
+
+    "." wrote the CV straight into the folder that holds the six bases and the
+    experience inventory; ".." resolved a level above it.
+    """
+    root = tmp_path / "קורות חיים"
+    path = render.output_path(CONTRACT, company=company, fingerprint="abc123def456", root=root)
+
+    assert path.parent.name not in (".", "..", "")
+    assert not path.parent.name.startswith(".")
+    assert path.resolve().is_relative_to(root.resolve())
+    assert path.parent.resolve() != root.resolve()
+
+
+def test_an_output_path_that_escaped_the_root_is_an_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(render, "folder_name", lambda **_: "../elsewhere")
+    with pytest.raises(render.UnsafeOutputPath):
+        render.output_path(CONTRACT, company="Acme", root=tmp_path)
+
+
+def test_writing_never_silently_overwrites_a_document_being_edited(bases_dir, tmp_path):
+    """`format: docx` exists because Noam edits the file in Word afterwards.
+
+    A second `desk tailor --write` used to destroy those edits with no prompt
+    and no backup.
+    """
+    out = tmp_path / "out" / "cv.docx"
+    approved = cs.ChangeSet(
+        changes=(
+            change(
+                section="exp.0.bullet.2",
+                before=BULLET_DASHBOARDS,
+                after="Built reporting dashboards for the weekly review",
+                source=cs.INVENTORY,
+                source_line="Reporting dashboards were rebuilt during the quarterly review.",
+            ),
+        )
+    )
+    render.write(bases.load_for("ai_builder", directory=bases_dir), approved, out)
+    out.write_bytes(b"an evening of Noam's edits, in Word")
+
+    with pytest.raises(render.OutputExists):
+        render.write(bases.load_for("ai_builder", directory=bases_dir), approved, out)
+    assert out.read_bytes() == b"an evening of Noam's edits, in Word"
+
+    render.write(bases.load_for("ai_builder", directory=bases_dir), approved, out, force=True)
+    assert bases.load(out).line("exp.0.bullet.2").text.startswith("Built reporting")
+    assert [p.name for p in out.parent.iterdir()] == [out.name], "no staging file left behind"
 
 
 def test_the_diff_shows_the_evidence_behind_every_change(base):

@@ -77,6 +77,21 @@ class Change:
     def removes_line(self) -> bool:
         return self.op in DROP_OPS and not self.after.strip()
 
+    @property
+    def edits_text(self) -> bool:
+        """Whether this change rewrites a line's text.
+
+        The one dispatch both the projection and the renderer read. They used
+        to decide separately — `project` on `TEXT_OPS` and `apply` on "not a
+        reorder and not a removal" — and the gap between the two answers was a
+        `drop_secondary_bullet` carrying a non-empty `after`: invisible to
+        every document-level check and written into the paragraph anyway.
+        `drop_secondary_bullet` removes a bullet or it is not a change at all,
+        which the contract now says out loud; here the two agree by
+        construction.
+        """
+        return self.op in TEXT_OPS and not self.removes_line
+
     def order_before(self) -> tuple[str, ...]:
         return _addresses(self.before)
 
@@ -192,9 +207,8 @@ def project(base: Base, changeset: ChangeSet | Sequence[Change]) -> Projected:
     dropped: list[str] = []
 
     for change in changes:
-        if change.op in TEXT_OPS and not change.removes_line:
-            if change.section in text:
-                text[change.section] = change.after
+        if change.edits_text and change.section in text:
+            text[change.section] = change.after
 
     for change in changes:
         if change.removes_line and change.section in text:
