@@ -21,6 +21,8 @@ import pytest
 from desk.config import load_spec
 from desk.gates import (
     Candidate,
+    GateReport,
+    GateResult,
     Verdict,
     applied,
     degree,
@@ -645,3 +647,33 @@ def test_an_open_clause_beside_the_demand_still_opens_it(spec) -> None:
     """The other direction, which the narrowing must not break."""
     body = "דרישות: תואר ראשון במדעי המחשב או תחום רלוונטי."
     assert degree.check(spec=spec, body=body).verdict is Verdict.PASS
+
+
+def test_the_chain_serializes_three_verdicts_and_not_two(spec) -> None:
+    """The file argues against exactly what its own serialization did.
+
+    A report where every gate answered `unknown` used to emit "verdict": "pass"
+    into the decisions row and the digest — the binary field this design exists
+    to avoid. A board that states no dates must not serialize identically to a
+    board that states fresh ones.
+    """
+    silent = GateReport(
+        results=(
+            GateResult("freshness", Verdict.UNKNOWN, reason="the board prints no date"),
+            GateResult("degree", Verdict.UNKNOWN, reason="no degree is stated"),
+        )
+    )
+    assert silent.as_dict()["verdict"] == "unknown"
+    assert silent.as_dict()["blocked"] is False
+
+    stated = GateReport(results=(GateResult("degree", Verdict.PASS, reason="an open clause"),))
+    assert stated.as_dict()["verdict"] == "pass"
+
+    refused = GateReport(
+        results=(
+            GateResult("geography", Verdict.BLOCK, reason="Jerusalem", evidence="ירושלים"),
+            GateResult("freshness", Verdict.UNKNOWN, reason="the board prints no date"),
+        )
+    )
+    assert refused.as_dict()["verdict"] == "block"
+    assert refused.as_dict()["blocked"] is True

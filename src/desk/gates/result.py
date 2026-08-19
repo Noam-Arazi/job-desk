@@ -98,9 +98,33 @@ class GateReport:
             return "passed, unstated: " + ", ".join(r.gate for r in unknown)
         return "passed all gates"
 
+    @property
+    def verdict(self) -> Verdict:
+        """The chain's own verdict, in three values and not two.
+
+        This file opens by arguing that folding `unknown` into `pass` makes a
+        board that states no dates look identical to a board that states fresh
+        ones — and then the serialization did exactly that, emitting a binary
+        field into the decisions row and the digest. The per-gate verdicts
+        survived underneath, so nothing was destroyed, but every reader of the
+        top-level field was reading a two-valued answer to a three-valued
+        question.
+
+        A block anywhere is a block. Otherwise, a chain carrying any unstated
+        gate passed on silence rather than on evidence, and says so.
+        """
+        if self.blocked:
+            return Verdict.BLOCK
+        return Verdict.UNKNOWN if self.unknowns else Verdict.PASS
+
     def as_dict(self) -> dict[str, Any]:
         return {
-            "verdict": "block" if self.blocked else "pass",
+            "verdict": str(self.verdict),
+            # Kept alongside the three-valued field, because the only question
+            # most callers have is whether the posting survived, and making
+            # them re-derive it from a string is how a caller ends up writing
+            # `verdict == "pass"` and dropping every unstated posting.
+            "blocked": self.blocked,
             "reason": self.reason,
             "gates": [r.as_dict() for r in self.results],
         }
