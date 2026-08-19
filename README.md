@@ -4,7 +4,7 @@ Every morning: a ranked shortlist of jobs and freelance projects, each with a ta
 
 **The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied at the dispatch point, by a policy the registry owns rather than by one the caller installs. The difference is the guarantee: an adversarial review broke the earlier version three ways without any cleverness at all — a context with no hooks, a context with `hooks=None`, and a hook bus somebody assembled without a policy hook — and in all three the handler ran. A jailbreak does not have to argue a model into calling the tool if it can find the call path where the check was never installed. `tests/test_policy.py` walks all three shapes, and `tests/test_injection.py` runs the payload end to end.
 
-> Status: sessions 1-9 are built — scraping over four boards, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. The attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
+> Status: sessions 1-9 are built — scraping over five boards, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. The attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
 
 ## Run it with nothing
 
@@ -101,4 +101,8 @@ The input is hostile by construction. A job posting is text written by a strange
 
 **DeepSeek's agent framework** was rejected — not on quality. It supplies precisely what this repo is meant to demonstrate the author can build: an orchestrator, a tool registry and a policy layer. A repo that assembles those from a dependency shows you can configure a framework, not write one.
 
-LinkedIn runs last, disabled by default, through an already-logged-in browser at human pace. No TLS impersonation and no anti-bot bypass: scraping politely and evading a bot defence are different acts.
+### What the fetch layer does not do
+
+Every other source here either invites reading or says nothing about it, and where a site states a wish this repo follows it — XPlace asks for a ten-second crawl delay, the spec gives it two seconds, and `sites/xplace.py` says so out loud rather than quietly out-waiting it.
+
+What is *not* done there is the part worth keeping straight, because "scraping politely" and "evading a bot defence" are different acts and only one of them happens in this repo. No login, no cookie, no session, no TLS impersonation, no anti-bot bypass, no CAPTCHA solving, and nothing behind an authentication wall — only the endpoints LinkedIn serves to a logged-out browser, at one request every two seconds. `stealth: false` is not a setting that could be flipped: the fetch layer has no bypass in it to switch on.

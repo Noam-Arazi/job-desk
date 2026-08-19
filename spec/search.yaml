@@ -423,14 +423,23 @@ sites:
 
   - id: linkedin
     order: 5
-    enabled: false                 # enabled last, deliberately
-    fetch: attached_browser        # the already-logged-in Chrome session
-    rate_limit_rps: 0.1            # human pace
-    stealth: false                 # anti-bot bypass is NOT used here
-    notes: >
-      Scraped through the human's own logged-in browser at human pace.
-      No TLS impersonation, no Cloudflare bypass. This module is isolated
-      and can be switched off without affecting the rest of the run.
+    enabled: true
+    fetch: guest_api               # the logged-out endpoints, no session at all
+    rate_limit_rps: 0.5            # one request every two seconds
+    stealth: false                 # no bypass exists in the fetching layer
+    location: Israel               # the endpoint takes a place name, not a code
+    window_days: 7                 # applied by LinkedIn, not by us
+    max_details: 200               # one request each; the ceiling is reported
+        notes: >
+      Two logged-out endpoints, no account, no cookie, no key: a search that
+      takes a term, a place and a window, and a posting page that carries the
+      description. What is NOT done: no login,
+      no session, no cookie, no TLS impersonation, no anti-bot bypass, no
+      CAPTCHA solving, nothing behind an authentication wall. Unlike every
+      other board here the freshness window is applied server-side, so the
+      crawl stops on LinkedIn's own end-of-results sentinel rather than on the
+      first old item — the unfiltered feed is not in date order and a
+      four-month-old posting came back on page one.
 
   - id: xplace
     order: 6

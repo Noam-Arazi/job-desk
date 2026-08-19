@@ -20,20 +20,40 @@ def test_every_family_names_a_cv_base_and_carries_both_languages():
         assert family["terms_en"], f"{name} has no English search terms"
 
 
-def test_linkedin_is_last_of_the_job_boards_disabled_and_uses_no_stealth():
+def test_linkedin_is_last_of_the_job_boards_and_uses_no_stealth():
     sites = load_spec()["sites"]
     linkedin = next(s for s in sites if s["id"] == "linkedin")
     # XPlace sits after it in the list but is the freelance pipeline, not a job
     # board — the ordering claim is about the boards LinkedIn competes with.
     boards = [s for s in sites if s.get("pipeline") != "freelance"]
     assert linkedin["order"] == max(s["order"] for s in boards)
-    assert linkedin["enabled"] is False
     assert linkedin["stealth"] is False
-    assert linkedin["fetch"] == "attached_browser"
+    assert linkedin["fetch"] == "guest_api"
+
+
+def test_linkedin_carries_its_own_disclosure_in_the_spec():
+    """✅ 19.08.2026 — this site went from off-by-default behind a logged-in
+    browser to on, against the logged-out guest endpoints. The reason it is
+    the only site here read against its own the fetch rules has to travel with the
+    entry itself: a reader who changes `enabled` should meet the disclosure
+    before the request goes out, not after.
+    """
+    linkedin = next(s for s in load_spec()["sites"] if s["id"] == "linkedin")
+
+    assert linkedin["enabled"] is True
+    assert "the fetch rules" in linkedin["notes"]
+    assert "no login" in linkedin["notes"]
 
 
 def test_the_enabled_sites_are_ordered():
-    assert enabled_sites() == ["alljobs", "drushim", "gotfriends", "jobify", "xplace"]
+    assert enabled_sites() == [
+        "alljobs",
+        "drushim",
+        "gotfriends",
+        "jobify",
+        "linkedin",
+        "xplace",
+    ]
 
 
 def test_jobify_reads_through_the_browser_but_is_on_by_default():
