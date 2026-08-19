@@ -14,13 +14,10 @@ Two invariants this file exists to hold:
 
 from __future__ import annotations
 
-import hashlib
 import inspect
 import json
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from .hooks import ToolCall
@@ -278,38 +275,97 @@ def record_decision(
     )
 
 
-_SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]")
-
-
 @registry.register(
     "write_tailored_cv",
     Tier.WRITE_LOCAL,
-    "Write a tailored CV for one role into this run's directory. Never overwrites a base.",
+    "Cut the tailored CV for one role from its approved base and save it. This is the "
+    "write `desk tailor --write` performs; a dry run carries no approval token and is "
+    "denied here rather than by a branch in the caller.",
     {
         "type": "object",
         "properties": {
             "fingerprint": {"type": "string", "description": "The posting's content fingerprint."},
             "family": {"type": "string", "description": "The CV family this role maps to."},
             "language": {"type": "string", "description": "he or en."},
-            "content": {"type": "string", "description": "The full tailored document."},
+            "base_sha256": {
+                "type": "string",
+                "description": "The base the changeset was cut against. A base edited since is "
+                "refused rather than written over.",
+            },
+            "changeset": {
+                "type": "string",
+                "description": "The changeset as JSON, exactly as the contract check approved it.",
+            },
+            "company": {
+                "type": "string",
+                "description": "The employer. Names the destination folder and nothing else.",
+            },
+            "title": {
+                "type": "string",
+                "description": "The role. Names the destination folder and nothing else.",
+            },
+            "force": {
+                "type": "boolean",
+                "description": "Replace a document that already exists. Off by default: these "
+                "are edited by hand in Word afterwards.",
+            },
         },
-        "required": ["fingerprint", "family", "language", "content"],
+        "required": ["fingerprint", "family", "language", "base_sha256", "changeset"],
         "additionalProperties": False,
     },
 )
 def write_tailored_cv(
-    ctx: Any, fingerprint: str, family: str, language: str, content: str
+    ctx: Any,
+    fingerprint: str,
+    family: str,
+    language: str,
+    base_sha256: str,
+    changeset: str,
+    company: str = "",
+    title: str = "",
+    force: bool = False,
 ) -> dict[str, Any]:
-    # The filename is built from sanitized parts; a model-supplied string never
-    # reaches the filesystem as a path.
-    stem = _SAFE_NAME.sub("_", f"{fingerprint}_{family}_{language}")
-    target: Path = ctx.run_dir / "cv" / f"{stem}.md"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content, encoding="utf-8")
+    """The one write-local act the daily run actually performs.
+
+    No argument here names a path. That is not an oversight and it is asserted:
+    `evals/guardrails.py` fails the run if any tool below the external tier takes
+    a path, file, url or recipient, because a model-supplied destination is the
+    whole attack. The destination is derived instead — from the contract's output
+    template, through `render.output_path`, which asserts the result stays under
+    the configured root.
+
+    The base is re-read from disk and its digest checked against the one the
+    changeset was cut against. Noam edits his bases by hand between rounds, and
+    applying yesterday's changeset to today's base would land edits on lines that
+    have moved.
+    """
+    # Imported here rather than at module scope: python-docx is an optional extra,
+    # and the offline path has to import this module without it.
+    from .tailor import bases, render
+    from .tailor.changeset import ChangeSet
+    from .tailor.contract import load_contract
+
+    contract = getattr(ctx, "contract", None) or load_contract()
+    base = bases.load_for(
+        family,
+        directory=contract.get("inputs", {}).get("bases_dir", ""),
+        language=language,
+    )
+    if base.sha256 != base_sha256:
+        raise render.BaseMismatch(
+            f"{base.path.name} has changed since the changeset was cut "
+            f"({base_sha256[:12]} -> {base.sha256[:12]}); re-run the tailoring"
+        )
+
+    target = render.output_path(contract, company=company, title=title, fingerprint=fingerprint)
+    written = render.write(base, ChangeSet.from_json(changeset), target, force=bool(force))
     return {
-        "path": str(target),
-        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
-        "bytes": len(content.encode("utf-8")),
+        "path": str(written.path),
+        "base": base.path.name,
+        "base_sha256": base.sha256,
+        "changed": written.changed,
+        "removed": written.removed,
+        "reordered": written.reordered,
     }
 
 

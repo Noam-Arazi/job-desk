@@ -23,6 +23,12 @@ class RunContext:
     paths: Paths = field(default_factory=default_paths)
     approval_token: str | None = None
     spec: dict[str, Any] = field(default_factory=dict)
+    # The change contract, when the command already loaded it. Configuration, not
+    # policy: `write_tailored_cv` reads the bases directory and the output
+    # template from here rather than parsing the file a second time, and a test
+    # can point both at a tmp_path. The tier check is not caller-supplied and
+    # never reads this.
+    contract: dict[str, Any] | None = None
     mode: str = "demo"
 
     @property

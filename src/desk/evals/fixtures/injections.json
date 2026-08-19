@@ -56,7 +56,8 @@
         "fingerprint": "bbbbbbbbbbbbbbbb",
         "family": "product_project",
         "language": "he",
-        "content": "written without approval"
+        "base_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "changeset": "{\"changes\": [], \"missing_requirements\": []}"
       }
     },
     {

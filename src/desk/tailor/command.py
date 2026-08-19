@@ -20,6 +20,7 @@ import argparse
 from datetime import datetime
 
 from ..config import paths
+from ..registry import registry
 from ..store import Store
 from . import render
 from .bases import BaseNotFound
@@ -39,7 +40,17 @@ def cmd_tailor(args: argparse.Namespace) -> int:
 
     posting = store.get_posting(args.fingerprint) or {}
     contract = load_contract()
-    ctx = build_context(RunSettings(engine=args.engine, budget_usd=args.budget))
+    # The approval token is `--write` itself. A dry run is denied at the dispatch
+    # point rather than by an `if args.write` here: the check that stops a write
+    # should not be the one the caller could forget to make.
+    ctx = build_context(
+        RunSettings(
+            engine=args.engine,
+            budget_usd=args.budget,
+            approval_token="local-run" if args.write else None,
+        )
+    )
+    ctx.contract = contract
 
     try:
         result = tailor(
@@ -88,36 +99,46 @@ def cmd_tailor(args: argparse.Namespace) -> int:
         print("nothing written. re-run with --write to cut the document")
         return _done(store, ctx, 0)
 
-    path = render.output_path(
-        contract,
-        company=str(posting.get("company") or analysis.company),
-        title=str(posting.get("title") or analysis.title),
-        fingerprint=analysis.fingerprint,
+    # The document is cut through the registry, not by calling the renderer here.
+    # It is the one write-local act in the daily run, and routing it through the
+    # single dispatch point is what puts it under the same policy, tracing and
+    # redaction hooks as everything else. `--force` is the answer to "may this
+    # overwrite the document you have been editing in Word", so its absence
+    # means no, not "assume yes".
+    outcome = registry.dispatch(
+        "write_tailored_cv",
+        {
+            "fingerprint": analysis.fingerprint,
+            "family": base.family,
+            "language": base.language,
+            "base_sha256": base.sha256,
+            "changeset": result.changeset.as_json(),
+            "company": str(posting.get("company") or analysis.company),
+            "title": str(posting.get("title") or analysis.title),
+            "force": bool(getattr(args, "force", False)),
+        },
+        ctx,
     )
-    # `--force` is the answer to "may this overwrite the document you have been
-    # editing in Word", so its absence means no, not "assume yes".
-    try:
-        written = render.write(
-            base, result.changeset, path, force=bool(getattr(args, "force", False))
-        )
-    except render.OutputExists as exc:
+    if not outcome.ok:
         print("")
-        print(f"NOT WRITTEN  {exc}")
+        print(f"{'DENIED      ' if outcome.denied else 'NOT WRITTEN '} {outcome.error}")
         return _done(store, ctx, 1)
+
+    written = outcome.content
     store.put_tailored(
         analysis.fingerprint,
         family=base.family,
         language=base.language,
-        base_sha256=base.sha256,
-        path=str(written.path),
+        base_sha256=written["base_sha256"],
+        path=written["path"],
         changes=result.changeset.as_json(),
         now=datetime.now().isoformat(timespec="seconds"),
     )
     print("")
-    print(f"wrote    {written.path}")
+    print(f"wrote    {written['path']}")
     print(
-        f"applied  {written.changed} edited, {written.removed} removed, "
-        f"{written.reordered} reordered"
+        f"applied  {written['changed']} edited, {written['removed']} removed, "
+        f"{written['reordered']} reordered"
     )
     print("the page count is yours to check, in Word")
     return _done(store, ctx, 0)

@@ -4,7 +4,7 @@ Every morning: a ranked shortlist of jobs and freelance projects, each with a ta
 
 **The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied at the dispatch point, by a policy the registry owns rather than by one the caller installs. The difference is the guarantee: an adversarial review broke the earlier version three ways without any cleverness at all — a context with no hooks, a context with `hooks=None`, and a hook bus somebody assembled without a policy hook — and in all three the handler ran. A jailbreak does not have to argue a model into calling the tool if it can find the call path where the check was never installed. `tests/test_policy.py` walks all three shapes, and `tests/test_injection.py` runs the payload end to end.
 
-> Status: sessions 1-7 and the measurement half of 9 are built — scraping over three boards, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. XPlace (session 8), the attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
+> Status: sessions 1-9 are built — scraping over four boards, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. The attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
 
 ## Run it with nothing
 
@@ -56,7 +56,7 @@ src/desk/
 
 | Pattern | Where it lives | The test that pins it down |
 |---|---|---|
-| Tool use | `registry.py` | schema↔handler identity in both directions; tool errors return as `tool_result` and never raise |
+| Tool use | `registry.py` | schema↔handler identity in both directions; tool errors return as `tool_result` and never raise; the daily document write is dispatched through it |
 | Reflection | `analyst/reflect.py` | generator/evaluator loop on requirement extraction; the span check runs in Python first, so a fabricated requirement is deleted without a model call |
 | Planning | `orchestrator.py` | a typed plan whose dependency graph is validated before anything runs |
 | Orchestrator + workers | `pipeline.py`, agents | per-step token accounting against a single-agent baseline |
@@ -71,6 +71,8 @@ external      submit_application                  REGISTERED AND ALWAYS DENIED
 ```
 
 The external tool is registered deliberately. A tool that simply did not exist would prove nothing — a jailbroken model would fail with "unknown tool", which is a much weaker claim than "the model asked, and the boundary held".
+
+**What the daily run actually dispatches, stated plainly.** The daily path is not a tool loop. No agent in it is handed a tool list: each asks the model one narrow question and gets JSON back, and the stages around that are ordinary Python, so the registry does not sit between the analyst and the store. The exception is the act worth gating. `desk tailor --write` cuts the document by dispatching `write_tailored_cv`, which puts the one write-local act in the daily run under the same policy, tracing and redaction hooks as everything else — and `--write` *is* the approval token, so a dry run is denied at the dispatch point rather than by a branch in the caller that could be forgotten. No argument of that tool names a path; the destination is derived from the contract, and both the guardrail suite and `tests/test_tailor.py` fail if the schema ever grows one.
 
 ### Model routing
 

@@ -16,6 +16,7 @@ production code will look for.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,7 +27,9 @@ from docx import Document
 
 import desk.tailor.tailor as tl
 from desk.analyst.types import Analysis, Family, Fit, Requirement
+from desk.evals.guardrails import _REACH_PARAMS
 from desk.llm.base import LLMResponse
+from desk.registry import registry
 from desk.tailor import bases, render
 from desk.tailor import changeset as cs
 from desk.tailor import contract as ct
@@ -1188,3 +1191,122 @@ def test_the_approved_bases_parse_and_carry_their_anchors():
         assert base.employers, entry.family
         located = [a for a in ct.locate_anchors(base, CONTRACT) if a.located]
         assert len(located) == len(CONTRACT["anchors"]), entry.family
+
+
+# --- the write goes through the registry ----------------------------------
+#
+# `desk tailor --write` is the only write-local act in the daily run, and it is
+# performed by dispatching `write_tailored_cv` rather than by calling the
+# renderer directly. These tests exist because that was not true until now: the
+# registry gated a tool nothing in the daily path called, which is a guarantee
+# about a code path instead of about the system.
+
+
+def tailoring_contract(bases_dir: Path, out: Path) -> dict[str, Any]:
+    """The real contract with both ends pointed at tmp_path."""
+    contract = copy.deepcopy(CONTRACT)
+    contract["inputs"]["bases_dir"] = str(bases_dir)
+    contract["review"]["output"]["dir"] = f"{out}/{render.FOLDER_PLACEHOLDER}/"
+    return contract
+
+
+APPROVED = cs.ChangeSet(
+    changes=(
+        cs.Change(
+            op=cs.SWAP_TERMINOLOGY,
+            section="exp.0.bullet.2",
+            before=BULLET_DASHBOARDS,
+            after="Built reporting dashboards for the weekly review",
+            source=cs.INVENTORY,
+            source_line="Reporting dashboards were rebuilt during the quarterly review.",
+        ),
+    )
+)
+
+
+def dispatch_write(ctx, base, **overrides):
+    args = {
+        "fingerprint": "deadbeefcafe0000",
+        "family": base.family,
+        "language": base.language,
+        "base_sha256": base.sha256,
+        "changeset": APPROVED.as_json(),
+        "company": "Acme",
+        "title": "AI Engineer",
+    }
+    args.update(overrides)
+    return registry.dispatch("write_tailored_cv", args, ctx)
+
+
+def test_the_document_is_cut_by_dispatching_the_registered_tool(make_ctx, bases_dir, tmp_path):
+    out = tmp_path / "documents"
+    ctx = make_ctx(approval_token="local-run")
+    ctx.contract = tailoring_contract(bases_dir, out)
+
+    result = dispatch_write(ctx, bases.load_for("ai_builder", directory=bases_dir))
+
+    assert result.ok, result.error
+    written = Path(result.content["path"])
+    assert written.exists() and written.is_relative_to(out)
+    assert result.content["changed"] == 1
+
+    again = bases.load(written)
+    assert again.line("exp.0.bullet.2").text == "Built reporting dashboards for the weekly review"
+    assert again.summary_text == SUMMARY_TEXT
+
+
+def test_a_dry_run_carries_no_token_and_the_write_is_denied(make_ctx, bases_dir, tmp_path):
+    """The `--write` flag is the approval token, and the denial is not the caller's to make."""
+    out = tmp_path / "documents"
+    ctx = make_ctx(approval_token=None)
+    ctx.contract = tailoring_contract(bases_dir, out)
+
+    result = dispatch_write(ctx, bases.load_for("ai_builder", directory=bases_dir))
+
+    assert result.denied and not result.ok
+    assert "approval token" in str(result.error)
+    assert not out.exists(), "a denied write still put a document on disk"
+
+
+def test_a_base_edited_since_the_changeset_was_cut_is_refused(make_ctx, bases_dir, tmp_path):
+    out = tmp_path / "documents"
+    ctx = make_ctx(approval_token="local-run")
+    ctx.contract = tailoring_contract(bases_dir, out)
+    base = bases.load_for("ai_builder", directory=bases_dir)
+
+    result = dispatch_write(ctx, base, base_sha256="0" * 64)
+
+    assert not result.ok and not result.denied
+    assert "BaseMismatch" in str(result.error)
+    assert not out.exists()
+
+
+def test_the_dispatched_write_never_silently_replaces_a_document(make_ctx, bases_dir, tmp_path):
+    out = tmp_path / "documents"
+    ctx = make_ctx(approval_token="local-run")
+    ctx.contract = tailoring_contract(bases_dir, out)
+    base = bases.load_for("ai_builder", directory=bases_dir)
+
+    first = dispatch_write(ctx, base)
+    assert first.ok, first.error
+    Path(first.content["path"]).write_bytes(b"an evening of edits in Word")
+
+    second = dispatch_write(ctx, bases.load_for("ai_builder", directory=bases_dir))
+    assert not second.ok
+    assert "OutputExists" in str(second.error)
+    assert Path(first.content["path"]).read_bytes() == b"an evening of edits in Word"
+
+    forced = dispatch_write(ctx, bases.load_for("ai_builder", directory=bases_dir), force=True)
+    assert forced.ok, forced.error
+    assert Path(forced.content["path"]).read_bytes() != b"an evening of edits in Word"
+
+
+def test_no_argument_of_the_write_tool_names_a_destination():
+    """The destination is derived from the contract; a model never supplies one.
+
+    `evals/guardrails.py` asserts the same property across the whole registry.
+    It is repeated here because this is the tool that writes to disk, and the
+    guardrail would still pass if this schema quietly grew a `path`.
+    """
+    schema = registry.get("write_tailored_cv").input_schema
+    assert not set(schema["properties"]) & set(_REACH_PARAMS)
