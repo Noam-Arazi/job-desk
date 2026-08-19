@@ -63,6 +63,7 @@ class RawPosting:
             url=self.url,
             body=self.body,
             posted_at=self.posted_at,
+            stated_experience=getattr(self, "stated_experience", ""),
         )
 
 

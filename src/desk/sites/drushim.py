@@ -59,7 +59,15 @@ FIELDS: dict[str, tuple[str, ...]] = {
 # steadier than depending on sibling order in a generated layout.
 DETAILS_STRIP = ".job-details-sub"
 
-_EXPERIENCE = re.compile(r"(ללא נסיון|ללא ניסיון|\d+\s*(?:שנים|שנה))")
+# The range alternative comes first on purpose. Without it "3-5 שנים" matched
+# only its tail, "5 שנים", and the stored field said the board demanded five
+# years when it had written a range starting at three. The spec reads a range at
+# its lower bound, so the truncation did not merely lose information: it turned
+# a posting that passes the seniority ceiling into one that is blocked, and the
+# evidence quoted back to the human was a sentence the board never wrote.
+_EXPERIENCE = re.compile(
+    r"(ללא נסיון|ללא ניסיון|\d+\s*[-–—]\s*\d+\s*(?:שנים|שנה)|\d+\s*(?:שנים|שנה))"
+)
 
 
 def _first(card: Any, selectors: tuple[str, ...]) -> Any:

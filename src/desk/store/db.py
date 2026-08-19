@@ -56,6 +56,12 @@ CREATE TABLE IF NOT EXISTS postings (
     location     TEXT,
     body         TEXT,
     posted_at    TEXT,
+    -- What the board itself said about required experience, in its own words.
+    -- Drushim prints it as a separate field on every card, which is the one
+    -- place in this system where a gate gets a stated answer instead of having
+    -- to read it out of prose. It was parsed and then dropped here, so the
+    -- seniority gate fell back to the body for all 1,108 of those rows.
+    stated_experience TEXT,
     fetched_at   TEXT NOT NULL,
     run_id       TEXT,
     UNIQUE (site, external_id)
@@ -166,6 +172,7 @@ class Posting:
     url: str = ""
     body: str = ""
     posted_at: str = ""
+    stated_experience: str = ""
     fingerprint: str = field(default="")
 
     def __post_init__(self) -> None:
@@ -181,6 +188,21 @@ class Store:
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Add columns a store written by an older version does not have.
+
+        `CREATE TABLE IF NOT EXISTS` is silent about a table that exists with
+        the wrong shape, so a column added to SCHEMA never reaches a database
+        that already exists — and this project's database is the corpus every
+        measurement is taken on, which nobody wants to rebuild by re-scraping
+        three boards.
+        """
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(postings)")}
+        if "stated_experience" not in columns:
+            with self.tx() as c:
+                c.execute("ALTER TABLE postings ADD COLUMN stated_experience TEXT")
 
     def close(self) -> None:
         self.conn.close()
@@ -235,8 +257,9 @@ class Store:
             c.execute(
                 """
                 INSERT INTO postings(fingerprint, site, external_id, url, title, company,
-                                     location, body, posted_at, fetched_at, run_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                                     location, body, posted_at, stated_experience,
+                                     fetched_at, run_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(site, external_id) DO UPDATE SET
                     fingerprint = excluded.fingerprint,
                     title       = excluded.title,
@@ -245,6 +268,7 @@ class Store:
                     body        = excluded.body,
                     url         = excluded.url,
                     posted_at   = excluded.posted_at,
+                    stated_experience = excluded.stated_experience,
                     fetched_at  = excluded.fetched_at
                 """,
                 (
@@ -257,6 +281,7 @@ class Store:
                     posting.location,
                     posting.body,
                     posting.posted_at,
+                    posting.stated_experience,
                     now,
                     run_id,
                 ),

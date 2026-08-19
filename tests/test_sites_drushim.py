@@ -84,9 +84,15 @@ def test_the_body_is_the_advert_not_the_company_name(page: str) -> None:
         assert len(posting.body) > len(posting.company)
 
 
+# The two ranges below were written as their upper bounds until 2026-08-19,
+# which is what the parser produced and therefore what this test pinned. The
+# spec reads a range at its LOWER bound, so storing "2 שנים" for a card that
+# says "1-2 שנים" did not merely lose information — it moved the posting from
+# one side of the seniority ceiling to the other, and quoted back to the human
+# an experience demand the board had never written.
 @pytest.mark.parametrize(
     ("external_id", "experience"),
-    [("30087835", "ללא נסיון"), ("29898360", "2 שנים"), ("30037169", "4 שנים")],
+    [("30087835", "ללא נסיון"), ("29898360", "1-2 שנים"), ("30037169", "3-4 שנים")],
 )
 def test_the_required_experience_is_read_off_the_card(
     page: str, external_id: str, experience: str

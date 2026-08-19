@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from desk.gates import Candidate
 from desk.store import Posting, Store
 
 NOW = "2026-01-01T00:00:00+00:00"
@@ -70,3 +71,66 @@ def test_cv_bases_are_hash_pinned():
     store.put_cv_base("ai_builder", "he", "/x/base.md", "deadbeef", NOW)
     assert store.cv_base("ai_builder", "he")["sha256"] == "deadbeef"
     assert store.cv_base("ai_builder", "en") is None
+
+
+def test_the_board_s_own_experience_line_survives_the_store() -> None:
+    """Drushim states required experience as a field; it was dropped on the way in.
+
+    That field is the one place in this system where a gate is handed a stated
+    answer instead of having to read one out of prose, and the store had no
+    column for it — so the seniority gate fell back to the body for every one of
+    those postings.
+    """
+    store = Store()
+    store.upsert_posting(
+        Posting(
+            site="drushim",
+            external_id="1",
+            title="אנליסט/ית",
+            company="סונול",
+            location="נתניה",
+            stated_experience="1-2 שנים",
+        ),
+        now="2026-08-19T09:00:00",
+    )
+    row = store.all_postings()[0]
+    assert row["stated_experience"] == "1-2 שנים"
+    assert Candidate.from_row(row).stated_experience == "1-2 שנים"
+    store.close()
+
+
+def test_a_store_written_before_that_column_existed_still_opens() -> None:
+    """The corpus is not something anybody wants to rebuild by re-scraping.
+
+    `CREATE TABLE IF NOT EXISTS` is silent about a table that already exists
+    with the wrong shape, so a column added to the schema never reaches a
+    database that predates it.
+    """
+    import sqlite3
+    import tempfile
+    from pathlib import Path as _Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _Path(tmp) / "old.sqlite"
+        legacy = sqlite3.connect(path)
+        legacy.executescript(
+            """
+            CREATE TABLE fingerprints (fingerprint TEXT PRIMARY KEY, first_seen_at TEXT NOT NULL,
+                first_seen_run TEXT, times_seen INTEGER NOT NULL DEFAULT 1);
+            CREATE TABLE postings (id INTEGER PRIMARY KEY AUTOINCREMENT, fingerprint TEXT NOT NULL,
+                site TEXT NOT NULL, external_id TEXT NOT NULL, url TEXT, title TEXT NOT NULL,
+                company TEXT NOT NULL, location TEXT, body TEXT, posted_at TEXT,
+                fetched_at TEXT NOT NULL, run_id TEXT, UNIQUE (site, external_id));
+            """
+        )
+        legacy.commit()
+        legacy.close()
+
+        store = Store(path)
+        store.upsert_posting(
+            Posting(site="drushim", external_id="1", title="t", company="c",
+                    stated_experience="3-5 שנים"),
+            now="2026-08-19T09:00:00",
+        )
+        assert store.all_postings()[0]["stated_experience"] == "3-5 שנים"
+        store.close()
