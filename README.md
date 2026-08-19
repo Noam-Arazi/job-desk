@@ -2,7 +2,7 @@
 
 Every morning: a ranked shortlist of jobs and freelance projects, each with a tailored CV already written, delivered to Telegram. A human reads it and decides.
 
-**The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied unconditionally at the dispatch point, and there is a test that proves a compromised model still cannot reach it.
+**The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied at the dispatch point, by a policy the registry owns rather than by one the caller installs. The difference is the guarantee: an adversarial review broke the earlier version three ways without any cleverness at all — a context with no hooks, a context with `hooks=None`, and a hook bus somebody assembled without a policy hook — and in all three the handler ran. A jailbreak does not have to argue a model into calling the tool if it can find the call path where the check was never installed. `tests/test_policy.py` walks all three shapes, and `tests/test_injection.py` runs the payload end to end.
 
 > Status: sessions 1-7 and the measurement half of 9 are built — scraping over three boards, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. XPlace (session 8), the attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
 
