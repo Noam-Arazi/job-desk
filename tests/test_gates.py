@@ -577,3 +577,71 @@ def test_a_store_without_the_linking_table_still_gates_on_dates(tmp_path) -> Non
         store.upsert_posting(posting, now="2026-08-11T09:00:00")
 
         assert store_first_seen(store)(posting.fingerprint) == "2026-08-11T09:00:00"
+
+
+# ---------------------------------------------------------------------------
+# Three defects a reviewer reproduced on the real corpus. Each of them fails in
+# the expensive direction: a job the human wanted, dropped or let through
+# silently.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["ובחיפה", "שבחיפה", "וברעננה", "ומתל אביב", "ולתל אביב"],
+)
+def test_stacked_hebrew_prefixes_still_place_a_posting(location, spec) -> None:
+    """Hebrew stacks prefixes, and board prose does it constantly.
+
+    One allowed prefix letter read every one of these as word-internal, and the
+    gate answered `unknown` — which does not block, so the posting travelled
+    unplaced instead of accepted.
+    """
+    result = geography.check(spec=spec, location=location, title="", body="")
+    assert result.verdict is not Verdict.UNKNOWN
+
+
+def test_a_stacked_prefix_on_an_excluded_city_still_blocks(spec) -> None:
+    """The same bug, in the direction that actually lets a posting through.
+
+    ובירושלים returned `unknown` rather than `block`, so a Jerusalem posting
+    passed the one gate written to stop it.
+    """
+    result = geography.check(spec=spec, location="ובירושלים", title="", body="")
+    assert result.verdict is Verdict.BLOCK
+
+
+def test_a_degree_named_in_prose_and_demanded_later_is_still_caught(spec) -> None:
+    """Only the first occurrence of an alias used to be tested.
+
+    The opening mention failed the proximity test, the alias was discarded, and
+    the gate reported no closed-list degree — of a posting that demanded one two
+    lines below.
+    """
+    body = (
+        "החברה עוסקת במדעי המחשב ובפיתוח מוצרים. אנחנו מחפשים מפתח/ת. "
+        "דרישות: תואר ראשון במדעי המחשב חובה."
+    )
+    assert degree.check(spec=spec, body=body).verdict is Verdict.BLOCK
+
+
+def test_an_experience_clause_in_another_sentence_does_not_open_a_degree_list(spec) -> None:
+    """The spec warns about this exact sentence and the window re-admitted it.
+
+    "3 שנות ניסיון בתחום רלוונטי" is how a posting describes experience, not how
+    it softens a degree demand. At a 150-character radius it sat inside the
+    window of a demand it had nothing to do with, and released it.
+    """
+    body = (
+        "דרוש/ה מפתח/ת. דרישות: תואר ראשון במדעי המחשב חובה. "
+        "ניסיון בעבודה מול מסדי נתונים ובכתיבת שאילתות מורכבות. "
+        "יכולת עבודה בצוות. 3 שנות ניסיון בתחום רלוונטי."
+    )
+    assert len(body) > degree.CLAUSE_WINDOW
+    assert degree.check(spec=spec, body=body).verdict is Verdict.BLOCK
+
+
+def test_an_open_clause_beside_the_demand_still_opens_it(spec) -> None:
+    """The other direction, which the narrowing must not break."""
+    body = "דרישות: תואר ראשון במדעי המחשב או תחום רלוונטי."
+    assert degree.check(spec=spec, body=body).verdict is Verdict.PASS

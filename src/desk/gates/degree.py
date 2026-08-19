@@ -74,9 +74,36 @@ def closed_aliases(spec: Mapping[str, Any]) -> dict[str, str]:
 
 # How far from the demand an open clause can sit and still be about it.
 # Wide enough for a long list — "מדעי המחשב / מערכות מידע / הנדסת תוכנה /
-# מתמטיקה או תחום רלוונטי" is 60 characters before the clause is reached — and
-# narrow enough that a sentence elsewhere in the posting cannot reach it.
+# מתמטיקה או תחום רלוונטי" is 60 characters before the clause is reached.
+#
+# The radius alone was not enough. At 150 characters it re-admitted the exact
+# posting the rule was written for: a body demanding תואר ראשון במדעי המחשב and
+# closing, well inside the window, with "3 שנות ניסיון בתחום רלוונטי" — an
+# experience clause that softens no degree requirement — read as an open clause
+# and unblocked the posting. A requirements list crosses 150 characters
+# routinely, so the radius is now a ceiling on top of the real rule: the clause
+# has to sit in the same sentence or bullet as the demand.
 CLAUSE_WINDOW = 150
+
+# What ends a requirement in these postings. Boards write them as bullet lists
+# and as run-on lines, so a newline, a bullet glyph and a full stop all count.
+_BOUNDARIES = "\n\r.;•·|"
+
+
+def _sentence_around(text: str, at: int) -> str:
+    """The demand's own sentence or bullet, bounded by the radius as well.
+
+    Both bounds are needed. Without the sentence, an unrelated clause 140
+    characters away releases the posting; without the radius, a board that
+    writes its whole requirements block as one unpunctuated line would hand
+    back the entire block.
+    """
+    lower = max(0, at - CLAUSE_WINDOW)
+    upper = min(len(text), at + CLAUSE_WINDOW)
+    start = max((text.rfind(mark, lower, at) for mark in _BOUNDARIES), default=-1)
+    ends = [pos for pos in (text.find(mark, at, upper) for mark in _BOUNDARIES) if pos != -1]
+    end = min(ends) if ends else upper
+    return text[start + 1 if start != -1 else lower : end]
 
 
 def open_clause(spec: Mapping[str, Any], text: str, *, at: int | None = None) -> str:
@@ -91,7 +118,7 @@ def open_clause(spec: Mapping[str, Any], text: str, *, at: int | None = None) ->
     markers = ((spec.get("gates") or {}).get("degree") or {}).get("open_clause_markers") or ()
     window = text
     if at is not None:
-        window = text[max(0, at - CLAUSE_WINDOW) : at + CLAUSE_WINDOW]
+        window = _sentence_around(text, at)
     for marker in markers:
         flat = readable(str(marker))
         if flat and flat in window:
@@ -111,9 +138,18 @@ def check(*, spec: Mapping[str, Any], title: str = "", body: str = "") -> GateRe
     text = readable(title, body)
     hits: list[tuple[str, str, int]] = []
     for spelling, name in aliases.items():
+        # Every occurrence, not only the first. A posting that mentions
+        # מדעי המחשב in its opening paragraph and then demands it under דרישות
+        # used to be judged on the opening mention alone: the proximity test
+        # failed there, the alias was discarded, and the gate reported that no
+        # degree on the closed lists was demanded — of a posting that demanded
+        # one two lines further down.
         at = text.find(spelling)
-        if at != -1 and near(text, at, _DEGREE_WORDS):
-            hits.append((spelling, name, at))
+        while at != -1:
+            if near(text, at, _DEGREE_WORDS):
+                hits.append((spelling, name, at))
+                break
+            at = text.find(spelling, at + 1)
 
     if not hits:
         mentioned = any(word in text for word in _DEGREE_WORDS)

@@ -94,6 +94,7 @@ def _found_cities(text: str, index: Mapping[str, str]) -> list[tuple[str, str, i
 # letter is allowed in front of a city name; two Hebrew letters mean the match
 # is a fragment of something else.
 _PREFIXES = "בלמהוש כ".replace(" ", "")
+_MAX_PREFIXES = 2
 
 
 def _inside_a_word(text: str, start: int, end: int) -> bool:
@@ -106,13 +107,26 @@ def _inside_a_word(text: str, start: int, end: int) -> bool:
     after = text[end] if end < len(text) else " "
     if _is_hebrew_letter(after):
         return True
-    before = text[start - 1] if start > 0 else " "
-    if not _is_hebrew_letter(before):
-        return False
-    if before not in _PREFIXES:
-        return True
-    two_back = text[start - 2] if start > 1 else " "
-    return _is_hebrew_letter(two_back)
+    # Hebrew stacks its prefixes, and ordinary board prose does it constantly:
+    # ובחיפה, שבחיפה, וברעננה, ומתל אביב. Allowing only one prefix letter read
+    # all of those as word-internal and returned `unknown`. In the accepted
+    # direction that costs a job the human wanted; in the excluded direction it
+    # is worse — ובירושלים returned `unknown` instead of `block`, so a Jerusalem
+    # posting flowed straight through the gate that exists to stop it.
+    #
+    # Two is the ceiling and stays a ceiling: three stacked prefix letters in
+    # front of a town name is no longer a prefix, it is a different word.
+    index = start - 1
+    prefixes = 0
+    while index >= 0 and prefixes < _MAX_PREFIXES:
+        char = text[index]
+        if not _is_hebrew_letter(char):
+            return False
+        if char not in _PREFIXES:
+            return True
+        prefixes += 1
+        index -= 1
+    return index >= 0 and _is_hebrew_letter(text[index])
 
 
 def _is_hebrew_letter(char: str) -> bool:
