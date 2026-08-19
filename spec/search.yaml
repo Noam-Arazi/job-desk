@@ -436,7 +436,13 @@ sites:
     order: 6
     enabled: true
     fetch: scrapling_http
-    rate_limit_rps: 0.5
+    # ✅ 19.08.2026 — the site's the fetch rules asks for Crawl-delay: 10, and 0.5
+    # requests per second is five times faster than that. Scraping politely
+    # means reading what the host asked for and doing it, so this is 0.1.
+    # the fetch rules also carries `Disallow: /*jobs*?`: a query string on a jobs
+    # URL is off-limits, which is why the module walks the shelves and never
+    # paginates by parameter.
+    rate_limit_rps: 0.1
     pipeline: freelance            # separate flow — scope and budget, not
                                    # seniority and degree
 
