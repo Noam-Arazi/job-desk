@@ -18,6 +18,13 @@
   is enough — stays hung indefinitely, holds the run, and KeepAlive does not
   rescue it, because from launchd's point of view the job never exited.
 
+  The wrapper runs the whole morning pass — fetch, analyse, deliver — and the
+  four values below are the ones it refuses to start without. Three of them are
+  new on 23.08.2026, when the pass stopped being the digest alone: the engine,
+  because `replay` against a live store returns recorded answers that look like
+  real judgements, and the two ceilings on the analyst, because the only step
+  that spends should say out loud how much.
+
   The send flag lives in the wrapper, not here. Telegram was turned on in the
   spec on 19.08.2026 and the bot credentials sit in .env, which `desk` reads at
   startup — launchd has no way to export them into this job, and hard-coding a
@@ -47,6 +54,17 @@
         <!-- The explicit wall-clock ceiling. The wrapper refuses to run without it. -->
         <key>DESK_TIMEOUT_SECONDS</key>
         <string>900</string>
+
+        <!-- Live judgements, not replayed cassettes. -->
+        <key>DESK_ENGINE</key>
+        <string>claude-code</string>
+
+        <!-- What one morning may spend, and how many postings it may reach.
+             Noam's numbers to set; these are the conservative opening values. -->
+        <key>DESK_ANALYZE_BUDGET_USD</key>
+        <string>2.00</string>
+        <key>DESK_ANALYZE_LIMIT</key>
+        <string>60</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>

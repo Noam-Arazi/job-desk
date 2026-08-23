@@ -1246,6 +1246,72 @@ def test_the_scheduled_job_actually_delivers():
     assert "--send" in command[0]
 
 
+def test_the_morning_pass_refreshes_before_it_ranks() -> None:
+    """The bug this file exists to keep fixed.
+
+    Until 23.08.2026 the scheduled job ran `desk digest` and nothing else. A
+    digest is a view: it fetches nothing and judges nothing, so every morning
+    re-ranked whatever the store happened to hold and delivered the same list.
+    An empty day is a valid answer in this system; an unchanging one is not.
+    """
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    commands = [line for line in wrapper.splitlines() if "$UV" in line and "desk " in line]
+    order = [c for c in ("desk fetch", "desk analyze", "desk digest")
+             if any(c in line for line in commands)]
+    assert order == ["desk fetch", "desk analyze", "desk digest"]
+
+
+def test_the_site_list_is_the_spec_and_the_registry_and_not_a_third_copy() -> None:
+    """A hard-coded list in the wrapper is a list that goes stale in silence."""
+    from desk.sites import MODULES
+
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    for site in MODULES:
+        assert f'--site {site}' not in wrapper
+        assert f'"{site}"' not in wrapper
+    assert "MODULES" in wrapper
+
+
+def test_a_site_enabled_with_no_module_is_named_and_not_skipped() -> None:
+    """jobify is enabled in the spec and has no module. Silence would read as ran."""
+    from desk.sites import MODULES
+
+    enabled = [s["id"] for s in load_spec()["sites"] if s.get("enabled")]
+    unbuilt = [s for s in enabled if s not in MODULES]
+    assert unbuilt, "if every enabled site is built, this guarantee needs a new fixture"
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    assert "unbuilt" in wrapper
+
+
+def test_one_failing_board_does_not_cost_the_morning_its_other_sources() -> None:
+    """Five sources exist so that one being down is survivable."""
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    assert "continuing with the rest" in wrapper
+
+
+def test_the_wrapper_refuses_every_value_it_should_not_default() -> None:
+    """Same rule as the timeout, now over the engine and the two ceilings.
+
+    `--engine replay` is the dangerous default: against a live store it returns
+    recorded answers that are indistinguishable from real judgements.
+    """
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    env = plist()["EnvironmentVariables"]
+    for name in ("DESK_TIMEOUT_SECONDS", "DESK_ENGINE",
+                 "DESK_ANALYZE_BUDGET_USD", "DESK_ANALYZE_LIMIT"):
+        assert f"fail_unset {name}" in wrapper
+        assert name in env
+    assert env["DESK_ENGINE"] != "replay"
+
+
+def test_the_watchdog_signals_the_whole_pass_and_not_just_the_shell() -> None:
+    """The pass is a subshell now; TERM to it alone leaves the hung fetch running."""
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    assert "set -m" in wrapper
+    assert 'kill -TERM -"$job"' in wrapper
+    assert 'kill -KILL -"$job"' in wrapper
+
+
 def test_no_credential_is_written_into_the_scheduled_job() -> None:
     """The plist is not gitignored. A token in it is a token in git history."""
     for path in (PLIST, PLIST.parent / "run-digest.sh"):

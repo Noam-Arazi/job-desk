@@ -1,5 +1,9 @@
 #!/bin/sh
-# The wrapper the launchd job runs. Its only reason to exist is the timeout.
+# The wrapper the launchd job runs. It is the whole morning pass, in order:
+# fetch, analyse, deliver. Before 23.08.2026 it ran only the last of the three,
+# which meant a scheduled morning re-ranked a store nobody had refreshed and
+# sent the same list every day. A digest is a view over the store; it fetches
+# nothing and it judges nothing.
 #
 # launchd has no key that bounds how long a job may run. ExitTimeOut is the
 # grace period between SIGTERM and SIGKILL once launchd is already stopping the
@@ -7,18 +11,26 @@
 # either. So the ceiling is enforced here, by a watchdog subshell, and the value
 # comes from the plist, which takes it from spec/search.yaml.
 #
-# Unset is a failure and not a default. A default here would be a second copy of
-# a number that belongs in the spec, and the whole point of the ceiling is that
-# it is stated on purpose.
+# Unset is a failure and not a default, and that rule now covers four numbers,
+# not one. A default here would be a second copy of a value that belongs in the
+# plist or the spec — and for the two that govern spending, and for the engine,
+# a default is worse than a duplicate. `--engine replay` against a live store
+# returns recorded answers that look exactly like real judgements: the failure
+# that reads as a valid result, which is the one thing this repo keeps refusing
+# to ship.
 
 set -u
 
-if [ -z "${DESK_TIMEOUT_SECONDS:-}" ]; then
-    echo "DESK_TIMEOUT_SECONDS is not set. It comes from the plist, which takes it" >&2
-    echo "from spec/search.yaml digest.schedule.timeout_seconds. Refusing to run" >&2
-    echo "unsupervised without an explicit ceiling." >&2
+fail_unset() {
+    echo "$1 is not set. It comes from the plist. Refusing to run unsupervised" >&2
+    echo "without an explicit value; see the comment at the top of this script." >&2
     exit 78
-fi
+}
+
+[ -n "${DESK_TIMEOUT_SECONDS:-}" ]    || fail_unset DESK_TIMEOUT_SECONDS
+[ -n "${DESK_ENGINE:-}" ]             || fail_unset DESK_ENGINE
+[ -n "${DESK_ANALYZE_BUDGET_USD:-}" ] || fail_unset DESK_ANALYZE_BUDGET_USD
+[ -n "${DESK_ANALYZE_LIMIT:-}" ]      || fail_unset DESK_ANALYZE_LIMIT
 
 DESK_HOME="${DESK_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export DESK_HOME
@@ -34,21 +46,73 @@ if [ -z "$UV" ]; then
     exit 127
 fi
 
-# --send, since 19.08.2026. Telegram is on in the spec and the credentials are
-# in .env, which `desk` now reads for itself — launchd cannot export them, and a
-# scheduled run that quietly lost its channel is the exact failure delivery.py
-# refuses. Into a disabled or unconfigured channel this is a hard error, never a
-# silent print, so a broken token fails on day one instead of looking like a
-# week of empty mornings.
-"$UV" run --directory "$DESK_HOME" desk digest --format telegram --send &
+# Which sites run is not a list kept here. The spec says what is enabled and the
+# registry says what is built, and the morning pass is the intersection of the
+# two. A site that is enabled with no module — jobify, as of today — is named on
+# stdout rather than skipped in silence, because "enabled" in the spec is a
+# promise a reader will otherwise believe.
+SITES="$("$UV" run --directory "$DESK_HOME" python - <<'PY'
+from desk.config import load_spec
+from desk.sites import MODULES
+
+enabled = [s["id"] for s in load_spec().get("sites", []) if s.get("enabled")]
+print(" ".join(s for s in enabled if s in MODULES))
+print(" ".join(s for s in enabled if s not in MODULES))
+PY
+)"
+runnable="$(echo "$SITES" | sed -n 1p)"
+unbuilt="$(echo "$SITES" | sed -n 2p)"
+
+if [ -z "$runnable" ]; then
+    echo "no enabled site has a module. Nothing to fetch; refusing to deliver a" >&2
+    echo "digest over a store that was never refreshed." >&2
+    exit 65
+fi
+echo "sites    $runnable"
+[ -n "$unbuilt" ] && echo "unbuilt  $unbuilt   (enabled in the spec, no module yet)"
+
+# Monitor mode, so the pipeline below becomes its own process group and the
+# watchdog can signal the whole tree. Without it a TERM reaches the subshell
+# and leaves the fetch that actually hung still running.
+set -m
+
+(
+    status=0
+    for site in $runnable; do
+        # A board that is down, rate-limiting or newly re-laid-out must not cost
+        # the morning its other four sources. It is recorded and the pass goes on.
+        if ! "$UV" run --directory "$DESK_HOME" desk fetch --site "$site" --write; then
+            echo "fetch $site failed; continuing with the rest" >&2
+            status=1
+        fi
+    done
+
+    # The analyst is the only step here that spends, so it is the only one that
+    # carries a ceiling of its own on top of the wall clock.
+    "$UV" run --directory "$DESK_HOME" desk analyze \
+        --engine "$DESK_ENGINE" \
+        --budget "$DESK_ANALYZE_BUDGET_USD" \
+        --limit "$DESK_ANALYZE_LIMIT" \
+        --write || exit 1
+
+    # --send, since 19.08.2026. Telegram is on in the spec and the credentials
+    # are in .env, which `desk` reads for itself — launchd cannot export them,
+    # and a scheduled run that quietly lost its channel is the exact failure
+    # delivery.py refuses. Into a disabled or unconfigured channel this is a
+    # hard error, never a silent print, so a broken token fails on day one
+    # instead of looking like a week of empty mornings.
+    "$UV" run --directory "$DESK_HOME" desk digest --format telegram --send || exit 1
+
+    exit "$status"
+) &
 job=$!
 
 (
     sleep "$DESK_TIMEOUT_SECONDS"
-    kill -TERM "$job" 2>/dev/null && {
-        echo "digest exceeded ${DESK_TIMEOUT_SECONDS}s and was stopped" >&2
+    kill -TERM -"$job" 2>/dev/null && {
+        echo "the morning pass exceeded ${DESK_TIMEOUT_SECONDS}s and was stopped" >&2
         sleep 10
-        kill -KILL "$job" 2>/dev/null
+        kill -KILL -"$job" 2>/dev/null
     }
 ) &
 watchdog=$!
