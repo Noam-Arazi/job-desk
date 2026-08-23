@@ -468,8 +468,14 @@ digest:
     - recommended_channel          # button | person | skip
     - tailored_cv_path
   schedule:
-    cron: "0 8 * * *"
-    timeout_seconds: 900           # explicit — Power Nap hangs untimed jobs
+    # ⭐ 23.08.2026 — both numbers replace guesses with a measurement. The first
+    # real pass fetched 915 pages across four sites in a little over forty
+    # minutes and was killed at 2400s before XPlace, the analyst or the digest
+    # ran. Throttle alone is ~30 minutes of that; parsing and writing are the
+    # rest. 06:00 so the whole pass lands before the morning rather than during
+    # it, and 5400s so a slow board costs the run time and not the delivery.
+    cron: "0 6 * * *"
+    timeout_seconds: 5400          # explicit — Power Nap hangs untimed jobs
 
 # ---------------------------------------------------------------------------
 # analyst — session 5

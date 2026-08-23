@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  The daily digest, at 08:00, from spec/search.yaml digest.schedule.
+  The morning pass, at 06:00, from spec/search.yaml digest.schedule.
 
-    cron: "0 8 * * *"      ->  StartCalendarInterval Hour 8, Minute 0
-    timeout_seconds: 900   ->  DESK_TIMEOUT_SECONDS, enforced by run-digest.sh
+    cron: "0 6 * * *"      ->  StartCalendarInterval Hour 6, Minute 0
+    timeout_seconds: 5400  ->  DESK_TIMEOUT_SECONDS, enforced by run-digest.sh
 
   Why the timeout is not a launchd key: there isn't one. ExitTimeOut is the
   grace period launchd allows between SIGTERM and SIGKILL when it is already
@@ -53,7 +53,7 @@
         <string>/Users/noamarazi/Desktop/job-desk</string>
         <!-- The explicit wall-clock ceiling. The wrapper refuses to run without it. -->
         <key>DESK_TIMEOUT_SECONDS</key>
-        <string>900</string>
+        <string>5400</string>
 
         <!-- Live judgements, not replayed cassettes. -->
         <key>DESK_ENGINE</key>
@@ -64,7 +64,7 @@
         <key>DESK_ANALYZE_BUDGET_USD</key>
         <string>2.00</string>
         <key>DESK_ANALYZE_LIMIT</key>
-        <string>60</string>
+        <string>400</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
@@ -72,14 +72,14 @@
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>8</integer>
+        <integer>6</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
 
     <!-- Grace period after launchd asks the job to stop. Not a run-time limit. -->
     <key>ExitTimeOut</key>
-    <integer>900</integer>
+    <integer>5400</integer>
 
     <!-- A digest is not a daemon. It runs, it prints, it exits. -->
     <key>RunAtLoad</key>
