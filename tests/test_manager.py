@@ -1297,11 +1297,36 @@ def test_the_wrapper_refuses_every_value_it_should_not_default() -> None:
     """
     wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
     env = plist()["EnvironmentVariables"]
-    for name in ("DESK_TIMEOUT_SECONDS", "DESK_ENGINE",
-                 "DESK_ANALYZE_BUDGET_USD", "DESK_ANALYZE_LIMIT"):
+    for name in ("DESK_TIMEOUT_SECONDS", "DESK_ENGINE", "DESK_ANALYZE_BUDGET_USD",
+                 "DESK_ANALYZE_LIMIT", "DESK_ANALYZE_TIMEOUT_SECONDS"):
         assert f"fail_unset {name}" in wrapper
         assert name in env
     assert env["DESK_ENGINE"] != "replay"
+
+
+def test_the_analyst_cannot_take_the_delivery_down_with_it() -> None:
+    """The worst outcome available is no message at all.
+
+    A morning with no delivery reads exactly like a morning with no matches.
+    The analyst writes in one transaction at the end, so stopping it loses its
+    own work and nothing else — every judgement from previous days is still in
+    the store, and a shortlist one day stale beats silence. So the analyst gets
+    a clock inside the pass, and the digest runs whatever that clock decides.
+    """
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    lines = wrapper.splitlines()
+
+    analyst_clock = next(i for i, line in enumerate(lines)
+                         if "DESK_ANALYZE_TIMEOUT_SECONDS" in line and "sleep" in line)
+    digest = next(i for i, line in enumerate(lines)
+                  if "desk digest" in line and "$UV" in line)
+    assert analyst_clock < digest
+
+    # and the digest is not chained behind the analyst's success
+    assert "--write || exit 1" not in wrapper
+    assert int(plist()["EnvironmentVariables"]["DESK_ANALYZE_TIMEOUT_SECONDS"]) < int(
+        plist()["EnvironmentVariables"]["DESK_TIMEOUT_SECONDS"]
+    )
 
 
 def test_the_watchdog_signals_the_whole_pass_and_not_just_the_shell() -> None:

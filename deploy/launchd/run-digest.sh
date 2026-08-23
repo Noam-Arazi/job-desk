@@ -31,6 +31,7 @@ fail_unset() {
 [ -n "${DESK_ENGINE:-}" ]             || fail_unset DESK_ENGINE
 [ -n "${DESK_ANALYZE_BUDGET_USD:-}" ] || fail_unset DESK_ANALYZE_BUDGET_USD
 [ -n "${DESK_ANALYZE_LIMIT:-}" ]      || fail_unset DESK_ANALYZE_LIMIT
+[ -n "${DESK_ANALYZE_TIMEOUT_SECONDS:-}" ] || fail_unset DESK_ANALYZE_TIMEOUT_SECONDS
 
 DESK_HOME="${DESK_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export DESK_HOME
@@ -87,13 +88,35 @@ set -m
         fi
     done
 
-    # The analyst is the only step here that spends, so it is the only one that
-    # carries a ceiling of its own on top of the wall clock.
+    # The analyst is the only step here that spends, so it carries a budget of
+    # its own on top of the wall clock — and a clock of its own besides.
+    #
+    # The clock is the important one and it was learned the hard way. The outer
+    # watchdog stops the whole pass, which means an analyst that overruns takes
+    # the digest down with it and the morning arrives with no message at all.
+    # That is the worst outcome available: no delivery reads exactly like a day
+    # with no matches. The analyst writes in one transaction at the end, so a
+    # stopped analyst loses its own work and nothing else — the store still
+    # holds every judgement from the days before, and the digest ranks those.
+    # Better a shortlist one day stale than silence.
     "$UV" run --directory "$DESK_HOME" desk analyze \
         --engine "$DESK_ENGINE" \
         --budget "$DESK_ANALYZE_BUDGET_USD" \
         --limit "$DESK_ANALYZE_LIMIT" \
-        --write || exit 1
+        --write &
+    analyst=$!
+    (
+        sleep "$DESK_ANALYZE_TIMEOUT_SECONDS"
+        kill -TERM "$analyst" 2>/dev/null && {
+            echo "analyst exceeded ${DESK_ANALYZE_TIMEOUT_SECONDS}s and was stopped;" >&2
+            echo "delivering over the judgements already in the store" >&2
+            sleep 5
+            kill -KILL "$analyst" 2>/dev/null
+        }
+    ) &
+    analyst_clock=$!
+    wait "$analyst" || status=1
+    kill "$analyst_clock" 2>/dev/null
 
     # --send, since 19.08.2026. Telegram is on in the spec and the credentials
     # are in .env, which `desk` reads for itself — launchd cannot export them,

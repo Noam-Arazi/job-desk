@@ -65,6 +65,12 @@
         <string>2.00</string>
         <key>DESK_ANALYZE_LIMIT</key>
         <string>400</string>
+
+        <!-- The analyst's own clock, inside the pass. It exists so an analyst
+             that overruns loses its own work and not the delivery: the digest
+             still goes out over the judgements already in the store. -->
+        <key>DESK_ANALYZE_TIMEOUT_SECONDS</key>
+        <string>2700</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
