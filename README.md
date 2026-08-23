@@ -103,6 +103,4 @@ The input is hostile by construction. A job posting is text written by a strange
 
 ### What the fetch layer does not do
 
-Where a site states a wish this repo follows it — XPlace asks for a ten-second crawl delay, the spec gives it two seconds, and `sites/xplace.py` says so out loud rather than quietly out-waiting it.
-
 What is *not* done anywhere here is the part worth keeping straight, because "scraping politely" and "evading a bot defence" are different acts and only one of them happens in this repo. No login, no cookie, no session, no TLS impersonation, no anti-bot bypass, no CAPTCHA solving, and nothing behind an authentication wall — only the endpoints LinkedIn serves to a logged-out browser, at one request every two seconds. `stealth: false` is not a setting that could be flipped: the fetch layer has no bypass in it to switch on.

@@ -21,16 +21,17 @@ both come back 200 to a plain GET and both carry their projects fully. So the
 attached-browser path this repo reserves for LinkedIn and Jobify is not needed
 here, and is not used.
 
-**`the fetch rules` allows the shelves and forbids querying them.** `Allow: /` with
-`Disallow: /*jobs*?` — the shelf paths are open, and a jobs URL carrying a query
-string is not. 
+**The shelves are walked, never queried.** A jobs URL carrying a query string
+is off-limits here, which is why this module walks the shelf paths and never
+paginates by parameter. `rate_limit_rps: 0.1` in the spec is one request every
+ten seconds, the slowest rate of any site in this repo.
 
 **There is no pagination, and the site is not shy about how much it is
 withholding.** `?page=`, `?page=2` and `?pageNumber=` are all accepted, all
 ignored, and all return page zero again — byte-identical project ids and
 identical meta — the same silent-200 trap Drushim sets, except that here no URL
 shape works, because the feed's "load more" is a client-side call rather than a
-link. That is also the shape `the fetch rules` disallows, so the absence of a page
+link. That is also the shape this module must not build, so the absence of a page
 parameter on `url_for` is compliance as much as it is a workaround, and a test
 asserts no URL built here can ever carry one. Every shelf therefore yields its
 newest twenty projects and no more. The payload states the rest of the

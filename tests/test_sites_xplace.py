@@ -13,7 +13,10 @@ a project with no budget and no payment model at all, one at ₪15,000 with
 seventy-nine bids already in, one with no bids, one whose deadline is years out,
 payment models 1, 2 and 5, and a category name containing commas.
 
-
+One test here is a constraint test rather than a parsing test. A query
+string on a jobs URL is off-limits here, so the module's refusal to build a
+paged URL is not only a finding about a broken pager; it is pinned so that a
+future "just add ?page=" cannot pass review quietly.
 """
 
 from __future__ import annotations
@@ -38,13 +41,13 @@ def page() -> str:
 
 
 # --------------------------------------------------------------------------
-# urls — and the site's own the fetch rules
+# urls
 # --------------------------------------------------------------------------
 
 
 def test_no_url_this_module_builds_carries_a_query_string() -> None:
-    """`the fetch rules` disallows `/*jobs*?`, so a paged URL would be both useless
-    and impolite. The live check was done offline against saved captures: the
+    """A paged URL would be both useless and off-limits here. The live check
+    was done offline against saved captures: the
     site answers `?page=1`, `?page=2` and `?pageNumber=1` with page zero every
     time, identical ids and identical meta."""
     for shelf in xplace.SHELVES:
