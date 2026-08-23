@@ -34,9 +34,13 @@ if [ -z "$UV" ]; then
     exit 127
 fi
 
-# No --send. Telegram is off in the spec, and --send into a disabled channel is
-# a hard error rather than a silent print. See docs/session-7.md.
-"$UV" run --directory "$DESK_HOME" desk digest &
+# --send, since 19.08.2026. Telegram is on in the spec and the credentials are
+# in .env, which `desk` now reads for itself — launchd cannot export them, and a
+# scheduled run that quietly lost its channel is the exact failure delivery.py
+# refuses. Into a disabled or unconfigured channel this is a hard error, never a
+# silent print, so a broken token fails on day one instead of looking like a
+# week of empty mornings.
+"$UV" run --directory "$DESK_HOME" desk digest --format telegram --send &
 job=$!
 
 (

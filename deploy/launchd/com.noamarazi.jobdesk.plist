@@ -18,9 +18,10 @@
   is enough — stays hung indefinitely, holds the run, and KeepAlive does not
   rescue it, because from launchd's point of view the job never exited.
 
-  Note there is no send flag here. Telegram is off in the spec, and asking to
-  send into a disabled channel is a hard error by design. Adding the flag is
-  the second half of turning delivery on; see docs/session-7.md.
+  The send flag lives in the wrapper, not here. Telegram was turned on in the
+  spec on 19.08.2026 and the bot credentials sit in .env, which `desk` reads at
+  startup — launchd has no way to export them into this job, and hard-coding a
+  token into a plist is a token in a file that is not gitignored.
 
   This file is not installed by anything. Copying it into ~/Library/LaunchAgents
   is a deliberate act by a human, and so is removing it.

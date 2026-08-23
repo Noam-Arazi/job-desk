@@ -522,6 +522,6 @@ manager:
   stale_days: 21             # untouched this long and it closes itself
 
   delivery:
-    telegram: false          # off until Noam turns it on; stdout until then
+    telegram: true           # on since 19.08.2026 — bot @NoamClaudeBot, credentials in .env
     auto_apply: never        # stated here so the answer is in the spec, not
                              # only in the code
