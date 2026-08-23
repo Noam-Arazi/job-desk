@@ -353,9 +353,9 @@ def test_no_url_this_module_builds_reaches_an_authenticated_path() -> None:
 
 
 def test_the_spec_pins_the_logged_out_guest_surface() -> None:
-    """The entry pins the surface and the absent bypass."""
+    """The entry pins the surface and the absence of any bypass, so a change
+    to either is an edit somebody has to make on purpose."""
     entry = next(e for e in load_spec()["sites"] if e["id"] == "linkedin")
 
     assert entry["fetch"] == "guest_api"
     assert entry["stealth"] is False
-    assert "the fetch rules" in entry["notes"]

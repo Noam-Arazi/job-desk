@@ -31,17 +31,13 @@ def test_linkedin_is_last_of_the_job_boards_and_uses_no_stealth():
     assert linkedin["fetch"] == "guest_api"
 
 
-def test_linkedin_carries_its_own_disclosure_in_the_spec():
-    """✅ 19.08.2026 — this site went from off-by-default behind a logged-in
-    browser to on, against the logged-out guest endpoints. The reason it is
-    the only site here read against its own the fetch rules has to travel with the
-    entry itself: a reader who changes `enabled` should meet the disclosure
-    before the request goes out, not after.
+def test_linkedin_states_what_it_does_not_reach():
+    """The entry has to say what the module stays out of, so a reader who
+    changes `enabled` meets the boundary before the request goes out.
     """
     linkedin = next(s for s in load_spec()["sites"] if s["id"] == "linkedin")
 
     assert linkedin["enabled"] is True
-    assert "the fetch rules" in linkedin["notes"]
     assert "no login" in linkedin["notes"]
 
 

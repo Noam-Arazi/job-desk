@@ -430,10 +430,11 @@ sites:
     location: Israel               # the endpoint takes a place name, not a code
     window_days: 7                 # applied by LinkedIn, not by us
     max_details: 200               # one request each; the ceiling is reported
-        notes: >
+    notes: >
       Two logged-out endpoints, no account, no cookie, no key: a search that
       takes a term, a place and a window, and a posting page that carries the
-      description. What is NOT done: no login,
+      description. Read for personal use at a polite rate.
+      What is NOT done: no login,
       no session, no cookie, no TLS impersonation, no anti-bot bypass, no
       CAPTCHA solving, nothing behind an authentication wall. Unlike every
       other board here the freshness window is applied server-side, so the
