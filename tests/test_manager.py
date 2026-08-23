@@ -741,12 +741,27 @@ def test_stdout_is_the_default_sink(spec, store) -> None:
     assert "job-desk digest" in stream.getvalue()
 
 
-def test_the_spec_ships_with_telegram_off() -> None:
-    assert delivery.telegram_enabled(load_spec()) is False
+def test_the_flag_in_the_spec_is_what_selects_the_channel() -> None:
+    """The spec is the switch, and this reads it rather than asserting its value.
+
+    It used to assert `is False`, which was true of the day it was written and
+    stopped being true the day Noam turned delivery on — a test that fails when
+    the configuration it is describing is configured. What is worth pinning is
+    that `telegram_enabled` reports the spec and invents nothing, in both
+    directions, which is what `sink_for` branches on.
+    """
+    live = load_spec()
+    assert delivery.telegram_enabled(live) is bool(
+        live["manager"]["delivery"]["telegram"]
+    )
+    assert delivery.telegram_enabled({"manager": {"delivery": {"telegram": True}}}) is True
+    assert delivery.telegram_enabled({"manager": {"delivery": {"telegram": False}}}) is False
+    assert delivery.telegram_enabled({}) is False
 
 
 def test_asking_to_send_into_a_disabled_channel_fails_loudly(spec) -> None:
     """A silent print here would look like a day with no jobs, for a week."""
+    spec["manager"]["delivery"]["telegram"] = False
     with pytest.raises(delivery.DeliveryError, match="telegram is false"):
         delivery.sink_for(spec, send=True, env={})
 
@@ -924,11 +939,17 @@ def test_a_failed_delivery_does_not_lose_the_closes(tmp_path, monkeypatch) -> No
         def send(self, text: str) -> None:
             raise delivery.DeliveryError("the channel refused the message")
 
+        def send_documents(self, documents) -> None:
+            raise AssertionError("attachments must not be attempted after a failed send")
+
     sent: list[str] = []
 
     class CapturingSink:
         def send(self, text: str) -> None:
             sent.append(text)
+
+        def send_documents(self, documents) -> None:
+            pass
 
     args = Args(limit=None, min_score=None, send=False, format="text")
 
@@ -1035,3 +1056,199 @@ def test_nothing_installs_the_job_for_the_user() -> None:
     package = Path(REPO_ROOT / "src" / "desk" / "manager")
     for module in package.glob("*.py"):
         assert "launchctl" not in module.read_text(encoding="utf-8")
+
+
+# --- attachments: the digest names a CV, and the CV travels with it ----------
+
+
+def _document(tmp_path, name="cv.docx", content=b"PK\x03\x04 a word file"):
+    path = tmp_path / name
+    path.write_bytes(content)
+    return delivery.Document(path=path, caption="1.  score 0.90")
+
+
+def test_a_missing_attachment_is_named_and_never_skipped(tmp_path) -> None:
+    """The digest promised a document. A quiet skip is a lie about a fact."""
+    missing = delivery.Document(path=tmp_path / "gone.docx")
+    with pytest.raises(delivery.DeliveryError, match="not on disk"):
+        missing.checked()
+
+
+def test_an_empty_attachment_is_refused(tmp_path) -> None:
+    empty = tmp_path / "cv.docx"
+    empty.write_bytes(b"")
+    with pytest.raises(delivery.DeliveryError, match="empty"):
+        delivery.Document(path=empty).checked()
+
+
+def test_an_oversized_attachment_is_refused_before_the_upload(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(delivery, "MAX_UPLOAD_BYTES", 4)
+    with pytest.raises(delivery.DeliveryError, match="over Telegram's cap"):
+        _document(tmp_path).checked()
+
+
+def test_stdout_names_the_files_and_still_checks_them(tmp_path) -> None:
+    stream = StringIO()
+    sink = delivery.StdoutSink(stream=stream)
+    sink.send_documents([_document(tmp_path)])
+    assert "cv.docx" in stream.getvalue()
+    assert sink.attached == 1
+
+    with pytest.raises(delivery.DeliveryError):
+        sink.send_documents([delivery.Document(path=tmp_path / "nope.docx")])
+
+
+def test_every_attachment_is_checked_before_the_first_byte_is_sent(tmp_path) -> None:
+    """Either the set is deliverable or nothing is half-sent."""
+    posted: list[str] = []
+    sink = delivery.TelegramSink("secret-token", "12345")
+    sink._post = lambda method, body, ctype, *, what: posted.append(method)  # type: ignore[method-assign]
+
+    good = _document(tmp_path)
+    missing = delivery.Document(path=tmp_path / "gone.docx")
+    with pytest.raises(delivery.DeliveryError, match="not on disk"):
+        sink.send_documents([good, missing])
+    assert posted == []
+    assert sink.attached == 0
+
+
+def test_the_upload_carries_the_file_the_chat_and_the_caption(tmp_path) -> None:
+    captured: dict[str, object] = {}
+    sink = delivery.TelegramSink("secret-token", "12345")
+
+    def fake_post(method, body, content_type, *, what):
+        captured.update(method=method, body=body, content_type=content_type)
+
+    sink._post = fake_post  # type: ignore[method-assign]
+    sink.send_documents([_document(tmp_path)])
+
+    assert captured["method"] == "sendDocument"
+    assert str(captured["content_type"]).startswith("multipart/form-data; boundary=")
+    body = bytes(captured["body"])  # type: ignore[arg-type]
+    assert b'name="chat_id"' in body and b"12345" in body
+    assert b'filename="cv.docx"' in body
+    assert b"PK\x03\x04 a word file" in body
+    assert b"secret-token" not in body
+    assert sink.attached == 1
+
+
+def test_a_caption_over_telegrams_limit_is_cut_rather_than_rejected(tmp_path) -> None:
+    captured: dict[str, bytes] = {}
+    sink = delivery.TelegramSink("secret-token", "12345")
+    sink._post = lambda m, body, c, *, what: captured.update(body=body)  # type: ignore[method-assign]
+    long_caption = delivery.Document(path=_document(tmp_path).path, caption="x" * 5000)
+    sink.send_documents([long_caption])
+    assert b"x" * delivery.CAPTION_LIMIT in captured["body"]
+    assert b"x" * (delivery.CAPTION_LIMIT + 1) not in captured["body"]
+
+
+def test_the_multipart_boundary_never_appears_inside_the_file() -> None:
+    """A boundary occurring in the payload would end the part early."""
+    body, content_type = delivery._multipart(
+        fields={"chat_id": "1"}, filename="cv.docx", content=b"\x00\x01\x02"
+    )
+    boundary = content_type.split("boundary=", 1)[1]
+    assert body.count(boundary.encode()) == 3  # one field, one file, one closing
+
+
+def test_a_failed_upload_does_not_carry_the_token_into_the_error(tmp_path) -> None:
+    """`urllib` puts the URL in its error text, and the token is in the URL."""
+    sink = delivery.TelegramSink("secret-token", "12345")
+
+    def explode(request, timeout=0):
+        raise OSError(f"failed opening {request.full_url}")
+
+    original = urllib.request.urlopen
+    urllib.request.urlopen = explode  # type: ignore[assignment]
+    try:
+        with pytest.raises(delivery.DeliveryError) as error:
+            sink.send_documents([_document(tmp_path)])
+    finally:
+        urllib.request.urlopen = original  # type: ignore[assignment]
+
+    assert "secret-token" not in str(error.value)
+    assert "cv.docx" in str(error.value)
+
+
+def test_the_attachments_are_exactly_what_the_digest_shows(tmp_path) -> None:
+    """Not a second selection out of the store. What was ranked is what is sent."""
+    from desk.manager.command import _attachments
+
+    written = tmp_path / "one.docx"
+    written.write_bytes(b"x")
+    ranked = digest_module.Digest(
+        date="2026-08-19",
+        considered=3,
+        min_score=0.5,
+        max_items=5,
+        items=(
+            digest_module.Item(fingerprint="a", score=0.9, title="AI Builder", cv_path=""),
+            digest_module.Item(
+                fingerprint="b", score=0.8, title="Data Analyst", cv_path=str(written)
+            ),
+        ),
+    )
+    documents = _attachments(ranked)
+    assert [document.path for document in documents] == [written]
+    assert documents[0].caption.splitlines() == ["2.  score 0.80", "Data Analyst"]
+
+
+# --- a follow-up says who it is about ----------------------------------------
+
+
+def test_a_nudge_is_labelled_by_the_employer_and_not_by_a_hash() -> None:
+    """Sixteen hex characters is unactionable on the phone this is read on."""
+    named = timers.Nudge(
+        fingerprint="200ef3e84d170290",
+        state="applied",
+        due_at="2026-07-20",
+        days_late=30,
+        company="שלמה חברה לביטוח",
+        title="אנליסט/ית ניהול סיכונים",
+    )
+    assert named.label() == "שלמה חברה לביטוח"
+
+    titled = timers.Nudge(
+        fingerprint="abc", state="applied", due_at="2026-07-20", days_late=1, title="Data Analyst"
+    )
+    assert titled.label() == "Data Analyst"
+
+
+def test_a_follow_up_whose_posting_is_gone_keeps_the_reminder(store) -> None:
+    """A dropped posting removes the name on a nudge, never the nudge."""
+    orphan = timers.Nudge(
+        fingerprint="ffffffffffffffff0000", state="applied", due_at="2026-07-20", days_late=30
+    )
+    assert "unnamed" in orphan.label()
+    assert "ffffffffffffffff" in orphan.label()
+
+
+def test_the_name_and_the_metrics_never_share_a_line() -> None:
+    """A Hebrew company and a Latin date on one line reorder into each other."""
+    nudge = timers.Nudge(
+        fingerprint="200ef3e84d170290",
+        state="applied",
+        due_at="2026-07-20",
+        days_late=30,
+        company="שלמה חברה לביטוח",
+    )
+    name_line, metric_line = render._nudge_lines(nudge)
+    assert name_line.strip() == "שלמה חברה לביטוח"
+    assert "days late" in metric_line
+    assert "שלמה" not in metric_line
+
+
+def test_the_scheduled_job_actually_delivers(): 
+    """A daily run that prints into a log file nobody opens is not a delivery."""
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    command = [line for line in wrapper.splitlines() if "desk digest" in line and "$UV" in line]
+    assert len(command) == 1
+    assert "--send" in command[0]
+
+
+def test_no_credential_is_written_into_the_scheduled_job() -> None:
+    """The plist is not gitignored. A token in it is a token in git history."""
+    for path in (PLIST, PLIST.parent / "run-digest.sh"):
+        text = path.read_text(encoding="utf-8")
+        assert delivery.TOKEN_ENV + "=" not in text
+        assert "api.telegram.org" not in text

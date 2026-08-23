@@ -71,3 +71,39 @@ def families(spec: dict[str, Any] | None = None) -> list[str]:
 def enabled_sites(spec: dict[str, Any] | None = None) -> list[str]:
     sites = (spec or load_spec()).get("sites", [])
     return [s["id"] for s in sorted(sites, key=lambda s: s["order"]) if s.get("enabled")]
+
+
+ENV_FILE = REPO_ROOT / ".env"
+
+
+def load_env(path: Path | None = None) -> list[str]:
+    """Read `.env` into the process environment. Returns the names it set.
+
+    The credentials this system needs — the engine choice and the Telegram bot
+    token — are read from `os.environ` and nowhere else, which is the right
+    rule and left a gap: a token written into `.env` reached no process at all,
+    because nothing here ever read the file. An interactive shell can export
+    them; the launchd job at 08:00 cannot, and a scheduled run that silently
+    lost its channel is exactly the failure `delivery.py` is built to refuse.
+
+    Two rules, both deliberate. A variable already present in the environment
+    **wins** — the file is the floor, never an override, so `DESK_ENGINE=replay
+    uv run desk ...` still does what it says. And a malformed line is skipped
+    rather than raising: this file holds secrets, and an exception carrying the
+    offending line is a token in a traceback.
+    """
+    target = path or ENV_FILE
+    if not target.exists():
+        return []
+    loaded: list[str] = []
+    for raw in target.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name = name.strip()
+        if not name or name in os.environ:
+            continue
+        os.environ[name] = value.strip().strip('"').strip("'")
+        loaded.append(name)
+    return loaded

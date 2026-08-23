@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from ..config import load_spec, paths
 from ..store import Store
@@ -75,6 +76,11 @@ def cmd_digest(args: argparse.Namespace) -> int:
             closed=closing,
         )
         sink.send(render.render(today, args.format))
+        # Attachments after the digest, and before the sweep is written. A CV
+        # that cannot be delivered fails the command for the same reason a
+        # message that cannot be delivered does, and leaves tomorrow's run the
+        # same work rather than a half-reported day.
+        sink.send_documents(_attachments(today))
         timers.close(store, closing, now=now, spec=spec)
     except delivery.DeliveryError as error:
         print(str(error), file=sys.stderr)
@@ -82,6 +88,27 @@ def cmd_digest(args: argparse.Namespace) -> int:
     finally:
         store.close()
     return 0
+
+
+def _attachments(today: digest_module.Digest) -> list[delivery.Document]:
+    """The tailored CVs named in today's digest, in the order they are ranked.
+
+    Only what the digest already points at. Building this from the store
+    instead would be a second, invisible selection of which jobs matter — the
+    same mistake `render.py` refuses to make — and the first day the message
+    ranked five jobs and six documents arrived, neither could be trusted.
+    """
+    documents: list[delivery.Document] = []
+    for position, item in enumerate(today.items, start=1):
+        if not item.has_cv:
+            continue
+        caption = "\n".join(
+            line
+            for line in (f"{position}.  score {item.score:.2f}", item.title, item.company)
+            if line
+        )
+        documents.append(delivery.Document(path=Path(item.cv_path), caption=caption))
+    return documents
 
 
 def cmd_state(args: argparse.Namespace) -> int:

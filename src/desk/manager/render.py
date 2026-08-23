@@ -101,7 +101,8 @@ def as_telegram(digest: Digest) -> str:
 
     if digest.follow_ups:
         lines += ["", _FOLLOW_UPS_HE]
-        lines += [_nudge_line(n) for n in digest.follow_ups]
+        for nudge in digest.follow_ups:
+            lines += _nudge_lines(nudge)
 
     lines += [""] + list(_NEVER_APPLIES_HE)
     return _cap("\n".join(lines))
@@ -168,7 +169,10 @@ def _item_block(position: int, item: Item) -> list[str]:
 def _follow_up_block(digest: Digest) -> list[str]:
     if not digest.follow_ups:
         return []
-    return [_FOLLOW_UPS_HE] + [f"  {_nudge_line(n)}" for n in digest.follow_ups] + [""]
+    lines = [_FOLLOW_UPS_HE]
+    for nudge in digest.follow_ups:
+        lines += _nudge_lines(nudge, indent="  ")
+    return lines + [""]
 
 
 def _closed_block(digest: Digest) -> list[str]:
@@ -177,7 +181,19 @@ def _closed_block(digest: Digest) -> list[str]:
     return [_CLOSED_HE] + [f"  {fingerprint[:16]}" for fingerprint in digest.closed] + [""]
 
 
-def _nudge_line(nudge: Nudge) -> str:
+def _nudge_lines(nudge: Nudge, *, indent: str = "") -> list[str]:
+    """Two lines, and they are two for the same reason everything else here is.
+
+    The employer's name arrives in whichever language they wrote it in, and the
+    state, the date and the fingerprint are always Latin. On one line a
+    bidirectional terminal — and a phone — reorders them into each other, which
+    is how "8 days late" ends up reading as though it belonged to the company
+    above. So the name gets a line of its own and the metrics get theirs.
+    """
+    return [f"{indent}{nudge.label()}", f"{indent}{_nudge_metrics(nudge)}"]
+
+
+def _nudge_metrics(nudge: Nudge) -> str:
     return (
         f"{nudge.state}   due {nudge.due_at[:10]}"
         f"   {nudge.days_late} days late   {nudge.fingerprint[:16]}"

@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 from . import prompts
-from .config import load_spec, paths
+from .config import load_env, load_spec, paths
 from .llm.routing import MODELS, TABLE
 from .orchestrator import Status, run
 from .pipeline import AGENTS, demo_plan
@@ -761,6 +761,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Before the parser, so that a command reading the environment reads the
+    # same one whether it was started by hand or by launchd at 08:00.
+    load_env()
     args = build_parser().parse_args(argv)
     return int(args.func(args))
 

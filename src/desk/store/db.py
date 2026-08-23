@@ -692,9 +692,19 @@ class Store:
         return [dict(r) for r in rows]
 
     def due_before(self, when: str) -> list[dict[str, Any]]:
+        """Everything past its follow-up date, carrying who and what it is.
+
+        The join is left, and that is the whole point of writing it out: a
+        follow-up row is keyed by fingerprint and the posting it refers to may
+        have been imported by hand or scraped from a board that has since
+        dropped it. A missing posting must not remove the reminder — it removes
+        only the name on it, which the renderer then says out loud.
+        """
         rows = self.conn.execute(
-            "SELECT * FROM pipeline_state WHERE due_at IS NOT NULL AND due_at <= ?"
-            " ORDER BY due_at",
+            "SELECT s.*, p.title AS title, p.company AS company"
+            " FROM pipeline_state s LEFT JOIN postings p ON p.fingerprint = s.fingerprint"
+            " WHERE s.due_at IS NOT NULL AND s.due_at <= ?"
+            " ORDER BY s.due_at",
             (when,),
         ).fetchall()
         return [dict(r) for r in rows]

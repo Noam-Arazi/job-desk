@@ -57,6 +57,20 @@ class Nudge:
     due_at: str
     days_late: int
     note: str = ""
+    title: str = ""
+    company: str = ""
+
+    def label(self) -> str:
+        """Who this reminder is about, or an honest admission that it is unknown.
+
+        A follow-up used to be rendered as sixteen hex characters. On a terminal
+        that is at least a key you can paste into `desk state`; on a phone, the
+        only place this digest is actually read, it is unactionable — Noam
+        cannot tell which of twenty-four employers has gone quiet, and a nudge
+        nobody can act on is a line that trains him to skip the section.
+        """
+        named = self.company or self.title
+        return named or f"unnamed  {self.fingerprint[:16]}"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +79,8 @@ class Nudge:
             "due_at": self.due_at,
             "days_late": self.days_late,
             "note": self.note,
+            "title": self.title,
+            "company": self.company,
         }
 
 
@@ -101,6 +117,8 @@ def due(store: TimerStore, *, now: datetime) -> list[Nudge]:
             due_at=str(row["due_at"]),
             days_late=_days_between(str(row["due_at"]), now),
             note=str(row["note"] or ""),
+            title=str(row.get("title") or ""),
+            company=str(row.get("company") or ""),
         )
         for row in rows
     ]
