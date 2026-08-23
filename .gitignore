@@ -27,3 +27,10 @@ build/
 
 # macos
 .DS_Store
+
+# The running log of this project: what was tried, what broke, why a posting was
+# applied to, how many applications stand open. It is the working notebook for
+# Noam and the sessions, not documentation, and it is the one tracked file whose
+# contents are nobody else's business. Untracked 23.08.2026, before the repo went
+# public. It stays on disk and it stays out of git.
+STATUS.md
