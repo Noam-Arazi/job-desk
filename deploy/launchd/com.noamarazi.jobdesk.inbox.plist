@@ -12,11 +12,16 @@
   minutes or a CV that arrives tomorrow.
 
   StartInterval and not StartCalendarInterval: there is no hour at which a
-  press happens. The interval is how long Noam waits for a document he just
-  asked for, and 900 seconds is the compromise — short enough that the CV lands
-  while he is still reading the message, long enough that a laptop asleep all
-  day does not wake for nothing. With Power Nap the poll runs inside the short
-  wake windows, which is exactly what the timeout in the wrapper is for.
+  press happens. The interval is how long Noam waits to see that his press
+  registered, and 900 seconds — the first value here — was wrong for a reason
+  worth writing down: he pressed, nothing on the screen changed for fifteen
+  minutes, and he reported the buttons as broken. They were not. A control with
+  no feedback is a broken control whatever the code does, so the interval is 60
+  seconds now and the press marks the message it was pressed on. One poll that
+  finds nothing is a single HTTP request and about a second of a core.
+
+  With Power Nap the poll runs inside the short wake windows, which is exactly
+  what the timeout in the wrapper is for.
 
   Nothing is lost when this does not run. Telegram keeps an unacknowledged
   update for 24 hours and hands it back until the stored cursor moves past it,
@@ -55,8 +60,14 @@
         <key>DESK_INBOX_BUDGET_USD</key>
         <string>1.00</string>
 
-        <!-- Shorter than the interval, on purpose: a poll that is still running
-             when the next one starts is a poll that hung. -->
+        <!-- Longer than the interval, and that is not a mistake. launchd runs
+             one copy of a label at a time: while a poll is still working, the
+             next interval does not start a second one, it simply waits. So this
+             number does not have to fit inside sixty seconds — and it must not,
+             because a ✅ press cuts a CV inside this run and a model call is not
+             a one-second act. What it bounds is a poll that hung, which on an
+             unattended job every minute is the failure that would otherwise
+             leave a process behind and never come back. -->
         <key>DESK_INBOX_TIMEOUT_SECONDS</key>
         <string>600</string>
 
@@ -65,7 +76,7 @@
     </dict>
 
     <key>StartInterval</key>
-    <integer>900</integer>
+    <integer>60</integer>
 
     <key>ExitTimeOut</key>
     <integer>600</integer>

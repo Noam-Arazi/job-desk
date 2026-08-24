@@ -234,6 +234,32 @@ class TelegramSink:
         result = answer.get("result")
         return list(result) if isinstance(result, list) else []
 
+    def edit_keyboard(self, message_id: int, buttons: Buttons) -> None:
+        """Rewrite the buttons under a message that is already sent.
+
+        This is the only feedback a press gets that a person can actually see.
+        `answerCallbackQuery` raises a toast that is gone in two seconds and is
+        missed on a phone in a pocket; the message itself is what Noam scrolls
+        back to. After this, the row he pressed says what he decided, so the
+        shortlist becomes the record of the triage rather than a list he has to
+        remember his way through.
+        """
+        import json
+
+        payload = json.dumps(
+            {
+                "chat_id": self.chat_id,
+                "message_id": int(message_id),
+                "reply_markup": {
+                    "inline_keyboard": [
+                        [{"text": label, "callback_data": _callback(data)} for label, data in row]
+                        for row in buttons
+                    ]
+                },
+            }
+        ).encode("utf-8")
+        self._post("editMessageReplyMarkup", payload, "application/json", what="the buttons")
+
     def answer_callback(self, callback_id: str, text: str = "") -> None:
         """Clear the spinner on the button. Telegram shows it until this lands."""
         import json

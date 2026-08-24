@@ -1816,13 +1816,30 @@ def test_the_inbox_job_polls_and_exits_rather_than_listening() -> None:
     assert job["StartInterval"] > 0
 
 
-def test_the_inbox_poll_cannot_outlive_its_own_interval() -> None:
-    """It runs unattended every few minutes. A hung poll that is never stopped
-    leaves a process behind on every interval until the machine is rebooted."""
+def test_the_inbox_poll_is_bounded_and_has_room_to_cut_a_cv() -> None:
+    """Two things at once, and the second is why the first is not the interval.
+
+    A hung poll on a job that fires every minute would leave a process behind
+    every minute, so the ceiling has to exist. But it must be longer than the
+    interval, not shorter: a ✅ press cuts a CV inside the poll and a model call
+    is not a one-second act. launchd runs one copy of a label at a time — the
+    next interval waits rather than starting a second poll — so a run that
+    takes ten minutes delays the next check and overlaps nothing.
+    """
     job = inbox_plist()
     env = job["EnvironmentVariables"]
-    assert int(env["DESK_INBOX_TIMEOUT_SECONDS"]) < job["StartInterval"]
-    assert job["ExitTimeOut"] == int(env["DESK_INBOX_TIMEOUT_SECONDS"])
+    ceiling = int(env["DESK_INBOX_TIMEOUT_SECONDS"])
+    assert ceiling > job["StartInterval"], "a cut must not be killed by the next tick"
+    assert job["ExitTimeOut"] == ceiling
+    assert job["KeepAlive"] is False, "one copy at a time is what makes the overlap safe"
+
+
+def test_a_press_is_answered_in_a_minute_and_not_in_a_quarter_of_an_hour() -> None:
+    """24.08.2026: the interval was 900s, Noam pressed, nothing on the screen
+    changed for fifteen minutes, and he reported the buttons as broken. They
+    were not. A control with no feedback is a broken control whatever the code
+    behind it does."""
+    assert inbox_plist()["StartInterval"] <= 60
 
 
 def test_the_inbox_wrapper_refuses_every_value_it_should_not_default() -> None:
@@ -1887,3 +1904,75 @@ def test_the_reason_is_cut_at_a_word_and_marked(store, spec):
     assert sentence.endswith("…")
     assert len(sentence) <= render.REASON_LIMIT + 1
     assert not sentence.replace("…", "").endswith(" ")
+
+
+def test_a_press_marks_the_message_it_was_pressed_on(store, spec, tmp_path):
+    """The feedback that makes a button a button.
+
+    A toast lives two seconds and is missed on a phone in a pocket. The message
+    is what gets scrolled back to, so the row Noam pressed shows what he decided
+    and the shortlist becomes the record of the triage.
+    """
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    analysed(store, "fp1", score=0.8)
+    today = digest_module.build(store, now=NOW, spec=spec)
+    rows = [[(label, data) for label, data in row] for row in render.keyboard(today)]
+
+    update = press("fp0", action="n", update_id=5)
+    update["callback_query"]["message"]["message_id"] = 77
+    update["callback_query"]["message"]["reply_markup"] = {
+        "inline_keyboard": [[{"text": t, "callback_data": d} for t, d in row] for row in rows]
+    }
+
+    edited: list = []
+
+    class Marking(FakeSink):
+        def edit_keyboard(self, message_id, buttons):
+            edited.append((message_id, [list(row) for row in buttons]))
+
+    inbox.run(store, Marking(updates=[update]), spec=spec, now=NOW,
+              cut=lambda _: None, log=lambda *_: None)
+
+    assert edited, "the message was never redrawn"
+    message_id, buttons = edited[0]
+    assert message_id == 77
+    decided_row = [row for row in buttons if "fp0" in row[0][1]][0]
+    assert len(decided_row) == 1, "the pressed row collapses into the decision"
+    assert decided_row[0][0].startswith("✖️") and decided_row[0][0].endswith("✓")
+    # every other posting keeps both of its buttons and its own position
+    other = [row for row in buttons if any("fp1" in data for _, data in row)][0]
+    assert len(other) == 2
+
+
+def test_pressing_a_decided_row_again_does_nothing(store, spec):
+    """The replacement carries a callback, because Telegram will not render a
+    button without one — so it has to answer to nothing this system handles."""
+    from desk.manager import inbox
+
+    update = press("fp0", action=render.DECIDED)
+    assert inbox.read(update, chat_id="12345").action == inbox.IGNORE
+
+
+def test_redrawing_the_message_cannot_undo_the_decision(store, spec):
+    """The state is the fact; the drawing is not. A channel that refuses the
+    edit must not roll back a posting Noam already closed."""
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+
+    class Refusing(FakeSink):
+        def edit_keyboard(self, message_id, buttons):
+            raise delivery.DeliveryError("telegram refused the buttons")
+
+    update = press("fp0", action="n")
+    update["callback_query"]["message"]["message_id"] = 9
+    update["callback_query"]["message"]["reply_markup"] = {
+        "inline_keyboard": [[{"text": "✖️ 1", "callback_data": "n:fp0"}]]
+    }
+    failed = inbox.run(store, Refusing(updates=[update]), spec=spec, now=NOW,
+                       cut=lambda _: None, log=lambda *_: None)
+
+    assert failed == 0
+    assert states.current(store, "fp0") == states.CLOSED

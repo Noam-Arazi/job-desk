@@ -57,6 +57,8 @@ class Press:
     fingerprint: str = ""
     offset: int = 0
     why: str = ""
+    message_id: int = 0
+    rows: tuple = ()
 
     @property
     def actionable(self) -> bool:
@@ -82,6 +84,12 @@ def read(update: Mapping[str, Any], *, chat_id: str) -> Press:
     message = query.get("message") if isinstance(query.get("message"), dict) else {}
     chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
     origin = str(chat.get("id", ""))
+    message_id = int(message.get("message_id") or 0)
+    markup = message.get("reply_markup") if isinstance(message.get("reply_markup"), dict) else {}
+    rows = tuple(
+        tuple((str(b.get("text", "")), str(b.get("callback_data", ""))) for b in row)
+        for row in markup.get("inline_keyboard", [])
+    )
 
     # Both halves, and both equal to the configured chat. In a private chat
     # with a bot the chat id *is* the account id, so this is one fact checked
@@ -102,10 +110,12 @@ def read(update: Mapping[str, Any], *, chat_id: str) -> Press:
         return Press(update_id, IGNORE, callback_id, why=f"unknown button {data[:32]!r}")
 
     if action is MORE:
-        return Press(update_id, MORE, callback_id, offset=_offset(rest))
+        return Press(update_id, MORE, callback_id, offset=_offset(rest),
+                     message_id=message_id, rows=rows)
     if not rest:
         return Press(update_id, IGNORE, callback_id, why="a button with no posting")
-    return Press(update_id, action, callback_id, fingerprint=rest)
+    return Press(update_id, action, callback_id, fingerprint=rest,
+                 message_id=message_id, rows=rows)
 
 
 def _offset(raw: str) -> int:
@@ -192,6 +202,7 @@ def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, t
         states.move(store, press.fingerprint, states.CLOSED, spec=spec, now=now,
                     note="not relevant, by button")
         _answer(sink, press, "ירד מהרשימה")
+        _mark(sink, press, render, "n")
         return f"closed   {press.fingerprint[:12]}"
 
     # APPROVE. The state is recorded first and the document second, because the
@@ -202,6 +213,7 @@ def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, t
         states.move(store, press.fingerprint, states.APPROVED, spec=spec, now=now,
                     note="relevant, by button")
     _answer(sink, press, "מכין קורות חיים")
+    _mark(sink, press, render, "y")
     path = cut(press.fingerprint)
     if not path:
         return f"approved {press.fingerprint[:12]}, no document yet"
@@ -217,6 +229,22 @@ def _caption(store, fingerprint: str) -> str:
     title = str(posting.get("title") or "")
     company = str(posting.get("company") or "")
     return "\n".join(line for line in (title, company) if line)
+
+
+def _mark(sink, press: Press, render, action: str) -> None:
+    """Show the decision on the message itself, not only in a toast.
+
+    A toast lives two seconds and is missed on a phone in a pocket. The message
+    is what gets scrolled back to, so the row Noam pressed becomes the record of
+    what he decided. Failing to redraw it is cosmetic and must never undo the
+    decision that was already written, which is why this cannot raise.
+    """
+    if not press.message_id or not press.rows:
+        return
+    try:
+        sink.edit_keyboard(press.message_id, render.decided(press.rows, press.fingerprint, action))
+    except Exception:  # noqa: BLE001 - the state is written; the drawing is not the fact
+        pass
 
 
 def _answer(sink, press: Press, text: str) -> None:

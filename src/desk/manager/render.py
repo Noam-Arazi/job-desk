@@ -167,6 +167,33 @@ def keyboard(digest: Digest) -> list[list[tuple[str, str]]]:
     return rows
 
 
+# A pressed row is replaced rather than removed. Removing it would renumber
+# nothing — the digest text still says 3 — but it would leave a message whose
+# buttons no longer line up with the postings above them, which is the one way
+# a press can name the wrong job.
+DECIDED = "done"
+
+MARKED = {RELEVANT: "✅", NOT_RELEVANT: "✖️"}
+
+
+def decided(rows, fingerprint: str, action: str):
+    """The same keyboard, with the row for one posting showing the decision.
+
+    The replacement carries a callback of its own rather than none, because a
+    button with no data is a button Telegram will not render — and pressing it
+    again has to be harmless, so it answers to nothing this system handles.
+    """
+    marked = []
+    for row in rows:
+        target = any(str(data).endswith(f":{fingerprint}") for _, data in row)
+        if not target:
+            marked.append([tuple(button) for button in row])
+            continue
+        position = next((label.split()[-1] for label, _ in row if " " in label), "")
+        marked.append([(f"{MARKED.get(action, '·')} {position} ✓", f"{DECIDED}:{fingerprint}")])
+    return marked
+
+
 RENDERERS = {"text": as_text, "telegram": as_telegram, "json": as_json}
 
 
