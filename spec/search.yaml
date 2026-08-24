@@ -444,7 +444,13 @@ sites:
 
   - id: xplace
     order: 6
-    enabled: true
+    # ⛔ 24.08.2026 — Noam turned this one off: freelance projects are not what
+    # he is looking for. It is off and not deleted, because the module, its
+    # fixtures and its tests are the only freelance pipeline in the repository
+    # and they stay proven; the flag is the whole decision and one word undoes
+    # it. Nothing else in the spec depends on this being on — the morning pass
+    # fetches the intersection of enabled and built, so it simply stops here.
+    enabled: false
     fetch: scrapling_http
     # ✅ 19.08.2026 — one request every ten seconds, the slowest rate here.
     # A query string on a jobs URL is off-limits, which is why the module

@@ -48,8 +48,21 @@ def test_the_enabled_sites_are_ordered():
         "gotfriends",
         "jobify",
         "linkedin",
-        "xplace",
     ]
+
+
+def test_xplace_is_off_but_still_described_as_the_freelance_pipeline():
+    """Off since 24.08.2026, because freelance projects are not what Noam is
+    after. The entry stays whole rather than being deleted: `pipeline` is what
+    keeps the gates — seniority, degree, geography — away from a project that
+    states none of them, so a later reader who flips the flag back gets the
+    separate flow and not a board with three gates that always abstain.
+    """
+    xplace = next(s for s in load_spec()["sites"] if s["id"] == "xplace")
+
+    assert xplace["enabled"] is False
+    assert xplace["pipeline"] == "freelance"
+    assert "xplace" not in enabled_sites()
 
 
 def test_jobify_reads_through_the_browser_but_is_on_by_default():
