@@ -801,10 +801,19 @@ def test_no_credential_is_written_anywhere_in_the_repo() -> None:
 
 
 class FakeResponse:
-    """Enough of an HTTP response for `send`. No socket is opened by any test."""
+    """Enough of an HTTP response for `send`. No socket is opened by any test.
 
-    def __init__(self, status: int = 200) -> None:
+    `body` is what the Bot API answered. Every call reads it now, not only the
+    ones that want an answer: `getUpdates` is a read, and the same guard that
+    turns a refusal into a DeliveryError has to see the payload to find it.
+    """
+
+    def __init__(self, status: int = 200, body: dict | None = None) -> None:
         self.status = status
+        self._body = json.dumps({"ok": True} if body is None else body).encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._body
 
     def __enter__(self) -> FakeResponse:
         return self
@@ -936,7 +945,7 @@ def test_a_failed_delivery_does_not_lose_the_closes(tmp_path, monkeypatch) -> No
     db.close()
 
     class FailingSink:
-        def send(self, text: str) -> None:
+        def send(self, text: str, buttons=()) -> None:
             raise delivery.DeliveryError("the channel refused the message")
 
         def send_documents(self, documents) -> None:
@@ -945,7 +954,7 @@ def test_a_failed_delivery_does_not_lose_the_closes(tmp_path, monkeypatch) -> No
     sent: list[str] = []
 
     class CapturingSink:
-        def send(self, text: str) -> None:
+        def send(self, text: str, buttons=()) -> None:
             sent.append(text)
 
         def send_documents(self, documents) -> None:
@@ -1253,12 +1262,67 @@ def test_the_morning_pass_refreshes_before_it_ranks() -> None:
     digest is a view: it fetches nothing and judges nothing, so every morning
     re-ranked whatever the store happened to hold and delivered the same list.
     An empty day is a valid answer in this system; an unchanging one is not.
+
+    `desk tailor` joined on 24.08.2026 and its position is the claim: after the
+    analyst, because it can only cut for postings that have been scored, and
+    before the digest, because the digest attaches the documents it finds.
     """
     wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
     commands = [line for line in wrapper.splitlines() if "$UV" in line and "desk " in line]
-    order = [c for c in ("desk fetch", "desk analyze", "desk digest")
+    order = [c for c in ("desk fetch", "desk analyze", "desk tailor", "desk digest")
              if any(c in line for line in commands)]
-    assert order == ["desk fetch", "desk analyze", "desk digest"]
+    assert order == ["desk fetch", "desk analyze", "desk tailor", "desk digest"]
+
+
+def test_the_morning_cuts_only_for_what_noam_approved() -> None:
+    """The gap Noam found, and the shape he asked for.
+
+    `desk tailor` takes one fingerprint, so the wrapper had no way to name any
+    posting and the step was simply missing — five jobs a day arrived with no
+    document. The first fix cut one for every ranked posting; he stopped it
+    before it ran, because four of the five are jobs he would not have applied
+    to. `--approved` reads the decision he made on his phone instead.
+    """
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    cut = [line for line in wrapper.splitlines() if "desk tailor" in line and "$UV" in line]
+    assert len(cut) == 1
+    assert "--approved" in cut[0]
+    assert "--for-digest" not in wrapper
+
+
+def test_tailoring_cannot_take_the_delivery_down_with_it() -> None:
+    """Third clock in the pass, same rule as the analyst's.
+
+    A morning that arrives with four CVs instead of five is a good morning. A
+    morning that arrives with nothing reads exactly like a morning with no
+    matches, which is the one failure this pass keeps refusing to ship.
+    """
+    wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
+    lines = wrapper.splitlines()
+
+    clock = next(i for i, line in enumerate(lines)
+                 if "DESK_TAILOR_TIMEOUT_SECONDS" in line and "sleep" in line)
+    digest = next(i for i, line in enumerate(lines)
+                  if "desk digest" in line and "$UV" in line)
+    assert clock < digest
+    assert "continuing to the delivery" in wrapper
+
+
+def test_every_inner_clock_fits_inside_the_outer_one() -> None:
+    """The ceilings are arithmetic, not three numbers that happen to be smaller.
+
+    Fetch has no clock of its own — it is bounded by the pass — so the inner
+    ceilings plus the measured fetch have to leave the delivery room to run.
+    """
+    env = plist()["EnvironmentVariables"]
+    outer = int(env["DESK_TIMEOUT_SECONDS"])
+    analyst = int(env["DESK_ANALYZE_TIMEOUT_SECONDS"])
+    cutter = int(env["DESK_TAILOR_TIMEOUT_SECONDS"])
+    measured_fetch = 2400  # 23.08.2026, four sites, 915 pages
+
+    assert analyst < outer
+    assert cutter < outer
+    assert measured_fetch + analyst + cutter < outer
 
 
 def test_the_site_list_is_the_spec_and_the_registry_and_not_a_third_copy() -> None:
@@ -1298,7 +1362,8 @@ def test_the_wrapper_refuses_every_value_it_should_not_default() -> None:
     wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
     env = plist()["EnvironmentVariables"]
     for name in ("DESK_TIMEOUT_SECONDS", "DESK_ENGINE", "DESK_ANALYZE_BUDGET_USD",
-                 "DESK_ANALYZE_LIMIT", "DESK_ANALYZE_TIMEOUT_SECONDS"):
+                 "DESK_ANALYZE_LIMIT", "DESK_ANALYZE_TIMEOUT_SECONDS",
+                 "DESK_TAILOR_BUDGET_USD", "DESK_TAILOR_TIMEOUT_SECONDS"):
         assert f"fail_unset {name}" in wrapper
         assert name in env
     assert env["DESK_ENGINE"] != "replay"
@@ -1340,6 +1405,445 @@ def test_the_watchdog_signals_the_whole_pass_and_not_just_the_shell() -> None:
 def test_no_credential_is_written_into_the_scheduled_job() -> None:
     """The plist is not gitignored. A token in it is a token in git history."""
     for path in (PLIST, PLIST.parent / "run-digest.sh"):
+        text = path.read_text(encoding="utf-8")
+        assert delivery.TOKEN_ENV + "=" not in text
+        assert "api.telegram.org" not in text
+
+
+# ---------------------------------------------------------------------------
+# `desk tailor --approved` — the step that waits for Noam to say which
+# ---------------------------------------------------------------------------
+#
+# None of these is about tailoring, and the cut is stubbed out on purpose. Every
+# one is about the selection: which postings get a document, and what happens to
+# the rest of the queue when one of them goes wrong. The first build cut a CV for
+# all five ranked postings every morning; Noam stopped it before it ever ran,
+# because four of those five are jobs he would not have applied to.
+
+
+def _cutter_args(**overrides):
+    import argparse
+
+    values = {
+        "approved": True,
+        "fingerprint": None,
+        "engine": "replay",
+        "budget": 1.0,
+        "write": True,
+        "force": False,
+        "language": None,
+    }
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
+
+def _cut(store, monkeypatch, args=None, outcome=None):
+    """Run the approved loop with the cut stubbed, and return what it asked for."""
+    from desk.tailor import command as tailor_command
+
+    asked: list[str] = []
+
+    def fake(_store, _ctx, _contract, fingerprint, _args):
+        asked.append(fingerprint)
+        return outcome(fingerprint) if outcome else 0
+
+    monkeypatch.setattr(tailor_command, "_tailor_one", fake)
+    code = tailor_command._tailor_approved(store, None, None, args or _cutter_args())
+    return asked, code
+
+
+def _approve(store, spec, fingerprint, at=NOW):
+    states.move(store, fingerprint, states.APPROVED, spec=spec, now=at)
+
+
+def test_only_what_noam_marked_gets_a_document(store, spec, monkeypatch):
+    """The design Noam asked for, and the one guarantee this command owes him.
+
+    Five postings rank every morning. Cutting five documents spends four model
+    calls on jobs he would not have applied to, and puts four files he never
+    asked for in the folder he opens by hand.
+    """
+    for index in range(5):
+        analysed(store, f"fp{index}", score=0.9)
+    _approve(store, spec, "fp1")
+    _approve(store, spec, "fp3")
+
+    asked, code = _cut(store, monkeypatch)
+
+    assert set(asked) == {"fp1", "fp3"}
+    assert code == 0
+
+
+def test_the_queue_runs_oldest_decision_first(store, spec, monkeypatch):
+    """A budget that runs out should run out at the newest decision — the one
+    he is most likely to still be looking at."""
+    for index in range(3):
+        analysed(store, f"fp{index}", score=0.9)
+    _approve(store, spec, "fp0", at=NOW)
+    _approve(store, spec, "fp1", at=NOW + timedelta(minutes=5))
+    _approve(store, spec, "fp2", at=NOW + timedelta(minutes=10))
+
+    asked, _ = _cut(store, monkeypatch)
+    assert asked == ["fp0", "fp1", "fp2"]
+
+
+def test_a_posting_that_already_has_a_document_is_left_alone(store, spec, monkeypatch):
+    """Noam edits these in Word. Re-cutting one is overwriting his morning."""
+    for index in range(2):
+        analysed(store, f"fp{index}", score=0.9)
+        _approve(store, spec, f"fp{index}")
+    store.put_tailored(
+        "fp1",
+        family="data_analyst",
+        language="he",
+        base_sha256="abc",
+        path="/tmp/already.docx",
+        changes="[]",
+        now=stamp(NOW),
+    )
+
+    asked, _ = _cut(store, monkeypatch)
+    assert asked == ["fp0"]
+
+    forced, _ = _cut(store, monkeypatch, args=_cutter_args(force=True))
+    assert "fp1" in forced
+
+
+def test_one_posting_that_raises_does_not_cost_the_others_their_documents(
+    store, spec, monkeypatch
+):
+    """Three CVs and a named failure beat a clean exit code and none."""
+    for index in range(4):
+        analysed(store, f"fp{index}", score=0.9)
+        _approve(store, spec, f"fp{index}", at=NOW + timedelta(minutes=index))
+
+    def blow_up(fingerprint):
+        if fingerprint == "fp1":
+            raise RuntimeError("the base would not open")
+        return 0
+
+    asked, code = _cut(store, monkeypatch, outcome=blow_up)
+
+    assert len(asked) == 4
+    assert code == 1
+
+
+def test_an_exhausted_budget_stops_the_queue_rather_than_the_delivery(store, spec, monkeypatch):
+    """The analyst's halt, one stage later. What was cut is on disk and goes out."""
+    from desk.llm.base import BudgetExceeded
+
+    for index in range(5):
+        analysed(store, f"fp{index}", score=0.9)
+        _approve(store, spec, f"fp{index}", at=NOW + timedelta(minutes=index))
+
+    cut_so_far: list[str] = []
+
+    def spend(fingerprint):
+        if len(cut_so_far) >= 2:
+            raise BudgetExceeded("$1.00 spent")
+        cut_so_far.append(fingerprint)
+        return 0
+
+    asked, code = _cut(store, monkeypatch, outcome=spend)
+
+    assert len(asked) == 3, "it stops at the one that raised, and asks for no more"
+    assert code == 1
+
+
+def test_cutting_documents_moves_nothing_along_the_pipeline(store, spec, monkeypatch):
+    """Approved is Noam's decision to apply, not the system's to advance.
+
+    Nothing about writing a document means anything was sent to anybody, so the
+    state must read `approved` after the cut exactly as it did before it.
+    """
+    analysed(store, "fp0", score=0.9)
+    _approve(store, spec, "fp0")
+
+    _cut(store, monkeypatch)
+
+    assert states.current(store, "fp0") == states.APPROVED
+    assert store.has_applied("fp0") is False
+
+
+# ---------------------------------------------------------------------------
+# the buttons, and the one path that comes back
+# ---------------------------------------------------------------------------
+#
+# The digest used to be the end of the conversation: five jobs went out and
+# nothing ever came back, so either every ranked posting got a document or none
+# did. These cover the answer — a press names one posting, and the only thing a
+# press can ever mean is "worth a CV", "not for me", or "show me the next five".
+
+
+class FakeSink:
+    """A phone, without a phone. Records what was sent and answers presses."""
+
+    def __init__(self, chat_id: str = "12345", updates=()):
+        self.chat_id = chat_id
+        self._updates = list(updates)
+        self.messages: list[tuple[str, tuple]] = []
+        self.documents: list = []
+        self.answered: list[tuple[str, str]] = []
+
+    def updates(self, *, offset: int = 0, timeout: int = 0):
+        return [u for u in self._updates if int(u.get("update_id", 0)) >= offset]
+
+    def send(self, text: str, buttons=()) -> None:
+        self.messages.append((text, tuple(tuple(row) for row in buttons)))
+
+    def send_documents(self, documents) -> None:
+        self.documents.extend(documents)
+
+    def answer_callback(self, callback_id: str, text: str = "") -> None:
+        self.answered.append((callback_id, text))
+
+
+def press(fingerprint: str, action: str = "y", *, update_id: int = 1, chat: str = "12345",
+          sender: str | None = None) -> dict:
+    return {
+        "update_id": update_id,
+        "callback_query": {
+            "id": f"cb{update_id}",
+            "from": {"id": int(sender if sender is not None else chat)},
+            "message": {"chat": {"id": int(chat)}},
+            "data": f"{action}:{fingerprint}",
+        },
+    }
+
+
+def test_the_buttons_name_the_postings_the_message_just_showed(store, spec):
+    """A fingerprint travels in the button, so a press cannot name anything else.
+
+    Nothing is typed and nothing is parsed out of free text: the only postings
+    reachable by a press are the ones the digest put on the screen.
+    """
+    for index in range(3):
+        analysed(store, f"fp{index}", score=0.9)
+    today = digest_module.build(store, now=NOW, spec=spec)
+
+    rows = render.keyboard(today)
+
+    assert len(rows) == len(today.items)
+    for row, item in zip(rows, today.items, strict=True):
+        assert [data for _, data in row] == [f"y:{item.fingerprint}", f"n:{item.fingerprint}"]
+
+
+def test_every_callback_fits_the_field_telegram_gives_it(store, spec):
+    """64 bytes, and a truncated fingerprint would resolve to nothing — or worse,
+    to a different posting."""
+    for index in range(6):
+        analysed(store, f"fp{index}", score=0.9)
+    today = digest_module.build(store, now=NOW, spec=spec)
+
+    for row in render.keyboard(today):
+        for _, data in row:
+            assert len(data.encode("utf-8")) <= delivery.CALLBACK_LIMIT
+    with pytest.raises(delivery.DeliveryError):
+        delivery.TelegramSink("t", "1").send("x", [[("label", "y:" + "f" * 70)]])
+
+
+def test_the_next_page_is_offered_only_when_there_is_one(store, spec):
+    """Noam asked to page past the five. A button that pages into nothing is a
+    button that lies about there being more."""
+    for index in range(7):
+        analysed(store, f"fp{index}", score=0.9 - index / 100)
+
+    first = digest_module.build(store, now=NOW, spec=spec)
+    assert first.remaining == 2
+    assert render.keyboard(first)[-1][0][1] == "m:5"
+
+    second = digest_module.build(store, now=NOW, spec=spec, offset=5)
+    assert [i.fingerprint for i in second.items] == ["fp5", "fp6"]
+    assert second.remaining == 0
+    assert all(row[0][1].startswith(("y:", "n:")) for row in render.keyboard(second))
+
+
+def test_a_page_is_a_window_over_one_ranking_and_never_repeats_a_posting(store, spec):
+    for index in range(9):
+        analysed(store, f"fp{index}", score=0.9 - index / 100)
+
+    seen = []
+    for start in (0, 5):
+        page = digest_module.build(store, now=NOW, spec=spec, offset=start)
+        seen += [item.fingerprint for item in page.items]
+
+    assert len(seen) == len(set(seen)) == 9
+
+
+def test_a_press_from_another_chat_is_refused(store):
+    """A bot token is a URL anyone holding it can talk to. `getUpdates` returns
+    whatever arrived, including a stranger who found the bot."""
+    from desk.manager import inbox
+
+    mine = inbox.read(press("fp0", chat="12345"), chat_id="12345")
+    theirs = inbox.read(press("fp0", chat="99999"), chat_id="12345")
+    impostor = inbox.read(press("fp0", chat="12345", sender="99999"), chat_id="12345")
+
+    assert mine.action == inbox.APPROVE
+    assert theirs.action == inbox.IGNORE and theirs.why == "another chat"
+    assert impostor.action == inbox.IGNORE and impostor.why == "another account"
+
+
+def test_an_unknown_button_is_dropped_rather_than_guessed(store):
+    from desk.manager import inbox
+
+    update = press("fp0", action="delete-everything")
+    assert inbox.read(update, chat_id="12345").action == inbox.IGNORE
+    assert inbox.read({"update_id": 3, "message": {"text": "hello"}}, chat_id="12345").action == (
+        inbox.IGNORE
+    )
+
+
+def test_yes_records_the_decision_and_cuts_exactly_one_document(store, spec, tmp_path):
+    """The shape Noam asked for: he marks the relevant ones, and only those get
+    a CV. Approving is a record of what he decided, never an application."""
+    from desk.manager import inbox
+
+    for index in range(3):
+        analysed(store, f"fp{index}", score=0.9)
+    document = tmp_path / "cv.docx"
+    document.write_bytes(b"docx")
+    cut_for: list[str] = []
+
+    def cut(fingerprint):
+        cut_for.append(fingerprint)
+        return document
+
+    sink = FakeSink(updates=[press("fp1")])
+    failed = inbox.run(store, sink, spec=spec, now=NOW, cut=cut, log=lambda *_: None)
+
+    assert failed == 0
+    assert cut_for == ["fp1"]
+    assert states.current(store, "fp1") == states.APPROVED
+    assert store.has_applied("fp1") is False
+    assert [d.path for d in sink.documents] == [document]
+    assert states.current(store, "fp0") is None
+
+
+def test_no_closes_the_posting_and_cuts_nothing(store, spec):
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    sink = FakeSink(updates=[press("fp0", action="n")])
+
+    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda _: pytest.fail("cut anyway"),
+              log=lambda *_: None)
+
+    assert states.current(store, "fp0") == states.CLOSED
+    assert sink.documents == []
+
+
+def test_more_sends_the_next_page_with_its_own_buttons(store, spec):
+    from desk.manager import inbox
+
+    for index in range(8):
+        analysed(store, f"fp{index}", score=0.9 - index / 100)
+    sink = FakeSink(updates=[{
+        "update_id": 4,
+        "callback_query": {"id": "cb4", "from": {"id": 12345},
+                           "message": {"chat": {"id": 12345}}, "data": "m:5"},
+    }])
+
+    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda _: None, log=lambda *_: None)
+
+    text, buttons = sink.messages[-1]
+    assert "page from 6" in text
+    assert len(buttons) == 3
+
+
+def test_a_press_naming_a_posting_the_store_does_not_have_is_refused(store, spec):
+    from desk.manager import inbox
+
+    sink = FakeSink(updates=[press("not-a-fingerprint")])
+    failed = inbox.run(store, sink, spec=spec, now=NOW,
+                       cut=lambda _: pytest.fail("cut anyway"), log=lambda *_: None)
+
+    assert failed == 0
+    assert sink.documents == []
+
+
+def test_one_press_that_fails_does_not_cost_the_others(store, spec, tmp_path):
+    """The poll is unattended. A batch has to survive a bad press in it."""
+    from desk.manager import inbox
+
+    for index in range(2):
+        analysed(store, f"fp{index}", score=0.9)
+    document = tmp_path / "cv.docx"
+    document.write_bytes(b"docx")
+
+    def cut(fingerprint):
+        if fingerprint == "fp0":
+            raise RuntimeError("the base would not open")
+        return document
+
+    sink = FakeSink(updates=[press("fp0", update_id=1), press("fp1", update_id=2)])
+    failed = inbox.run(store, sink, spec=spec, now=NOW, cut=cut, log=lambda *_: None)
+
+    assert failed == 1
+    assert [d.path for d in sink.documents] == [document]
+    assert states.current(store, "fp0") == states.APPROVED, "the decision survives a failed cut"
+
+
+def test_the_cursor_moves_past_what_was_handled_and_never_backwards(store, spec):
+    """Telegram hands an unacknowledged press back for 24 hours, which is what
+    makes a poll-and-exit safe. A cursor that slipped back would replay a `y`
+    and re-cut a document Noam has since been editing."""
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    sink = FakeSink(updates=[press("fp0", update_id=7)])
+    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda _: None, log=lambda *_: None)
+
+    assert store.cursor(inbox.CHANNEL) == "8"
+    assert inbox.next_cursor([inbox.Press(3, inbox.APPROVE)], "8") == "8"
+
+
+INBOX_PLIST = REPO_ROOT / "deploy" / "launchd" / "com.noamarazi.jobdesk.inbox.plist"
+
+
+def inbox_plist() -> dict:
+    return plistlib.loads(INBOX_PLIST.read_bytes())
+
+
+def test_the_inbox_job_polls_and_exits_rather_than_listening() -> None:
+    """A resident listener on a laptop that sleeps is a listener that is not
+    running. Poll-and-exit is safe because Telegram holds an unacknowledged
+    press for 24 hours and hands it back until the cursor moves past it."""
+    job = inbox_plist()
+    assert job["KeepAlive"] is False
+    assert job["RunAtLoad"] is False
+    assert "StartCalendarInterval" not in job, "there is no hour at which a button is pressed"
+    assert job["StartInterval"] > 0
+
+
+def test_the_inbox_poll_cannot_outlive_its_own_interval() -> None:
+    """It runs unattended every few minutes. A hung poll that is never stopped
+    leaves a process behind on every interval until the machine is rebooted."""
+    job = inbox_plist()
+    env = job["EnvironmentVariables"]
+    assert int(env["DESK_INBOX_TIMEOUT_SECONDS"]) < job["StartInterval"]
+    assert job["ExitTimeOut"] == int(env["DESK_INBOX_TIMEOUT_SECONDS"])
+
+
+def test_the_inbox_wrapper_refuses_every_value_it_should_not_default() -> None:
+    wrapper = (INBOX_PLIST.parent / "run-inbox.sh").read_text(encoding="utf-8")
+    env = inbox_plist()["EnvironmentVariables"]
+    for name in ("DESK_ENGINE", "DESK_INBOX_BUDGET_USD", "DESK_INBOX_TIMEOUT_SECONDS"):
+        assert f"fail_unset {name}" in wrapper
+        assert name in env
+    assert env["DESK_ENGINE"] != "replay"
+
+
+def test_both_jobs_read_the_same_repository() -> None:
+    """Two plists, one DESK_HOME. A second copy of the path is a second store."""
+    assert (
+        inbox_plist()["EnvironmentVariables"]["DESK_HOME"]
+        == plist()["EnvironmentVariables"]["DESK_HOME"]
+    )
+
+
+def test_no_credential_is_written_into_the_inbox_job() -> None:
+    for path in (INBOX_PLIST, INBOX_PLIST.parent / "run-inbox.sh"):
         text = path.read_text(encoding="utf-8")
         assert delivery.TOKEN_ENV + "=" not in text
         assert "api.telegram.org" not in text

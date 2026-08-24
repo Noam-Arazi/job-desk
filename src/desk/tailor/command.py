@@ -12,14 +12,32 @@ each changed line, the source behind it, and what the posting asked for that
 the CV does not claim. The last of those is the part worth the screen space —
 `auto_send: false` means the system never applies, so the only thing it owes
 Noam is everything he needs to decide.
+
+`--approved` is the scheduled form, added 24.08.2026, and the state it names is
+the whole design. The morning delivers a shortlist and cuts nothing; Noam reads
+it on his phone and marks the postings worth applying to; those, and only those,
+get a document. Tailoring every ranked posting was the obvious build and it is
+the wrong one — it spends a model call on four jobs out of five he would not
+have applied to, and it puts a CV he never asked for in a folder he opens by
+hand. `approved` already existed in the state machine as the word for "Noam
+decided this one is worth it", so this reads the decision rather than inventing
+a second place to keep it.
+
+The loop shares one context, so `--budget` is a ceiling over the whole batch
+rather than per posting, and an exhausted budget stops the loop the way it stops
+the analyst. One posting that raises does not end the run: it is counted, named
+and stepped over, because the three CVs that can be cut are worth more than a
+clean exit code.
 """
 
 from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from pathlib import Path
 
 from ..config import paths
+from ..llm.base import BudgetExceeded
 from ..registry import registry
 from ..store import Store
 from . import render
@@ -32,13 +50,6 @@ def cmd_tailor(args: argparse.Namespace) -> int:
     from ..runner import RunSettings, build_context
 
     store = Store(paths().ensure().db)
-    analysis = load_analysis(store, args.fingerprint)
-    if analysis is None:
-        print(f"no analysis for {args.fingerprint}; run `desk analyze --write` first")
-        store.close()
-        return 1
-
-    posting = store.get_posting(args.fingerprint) or {}
     contract = load_contract()
     # The approval token is `--write` itself. A dry run is denied at the dispatch
     # point rather than by an `if args.write` here: the check that stops a write
@@ -52,6 +63,73 @@ def cmd_tailor(args: argparse.Namespace) -> int:
     )
     ctx.contract = contract
 
+    if getattr(args, "approved", False):
+        return _done(store, ctx, _tailor_approved(store, ctx, contract, args))
+    return _done(store, ctx, _tailor_one(store, ctx, contract, args.fingerprint, args))
+
+
+def approved_without_a_document(store: Store, *, force: bool = False) -> list[str]:
+    """The postings Noam marked and that have no CV yet, oldest decision first.
+
+    Oldest first because the order is a queue of his decisions and a budget
+    that runs out should run out at the newest one, which is the one he is most
+    likely to still be looking at. `force` is the answer to "re-cut something I
+    have been editing in Word", so its absence means no.
+    """
+    from ..manager.states import APPROVED
+
+    rows = list(reversed(store.in_state(APPROVED)))
+    return [
+        str(row["fingerprint"])
+        for row in rows
+        if force or not store.tailored(str(row["fingerprint"]))
+    ]
+
+
+def _tailor_approved(store: Store, ctx: object, contract: object, args) -> int:
+    """Cut a CV for every posting Noam approved and that has none yet.
+
+    Nothing here decides which jobs matter. That decision was made on a phone,
+    recorded as a state transition with `source: human`, and this reads it.
+    """
+    wanted = approved_without_a_document(store, force=bool(args.force))
+    if not wanted:
+        print("approved  nothing is waiting for a document")
+        return 0
+
+    print(f"approved  {len(wanted)} waiting for a document")
+    failed = 0
+    for position, fingerprint in enumerate(wanted, start=1):
+        print("")
+        print(f"--- {position} of {len(wanted)}   {fingerprint[:12]}")
+        try:
+            if _tailor_one(store, ctx, contract, fingerprint, args) != 0:
+                failed += 1
+        except BudgetExceeded as exc:
+            # The same halt the analyst takes, and for the same reason: the
+            # documents already cut are on disk and the digest will attach them.
+            print(f"halted   budget: {exc}")
+            print(f"halted   {len(wanted) - position + 1} of {len(wanted)} left uncut")
+            failed += 1
+            break
+        except Exception as exc:  # noqa: BLE001 — one bad posting is not a failed run
+            print(f"failed   {fingerprint[:12]}  {type(exc).__name__}: {exc}")
+            failed += 1
+
+    print("")
+    print(f"cut      {len(wanted) - failed} of {len(wanted)}")
+    return 1 if failed else 0
+
+
+def _tailor_one(store: Store, ctx: object, contract: object, fingerprint: str, args) -> int:
+    """One posting, start to finish. Closes nothing: the caller owns the store."""
+    analysis = load_analysis(store, fingerprint)
+    if analysis is None:
+        print(f"no analysis for {fingerprint}; run `desk analyze --write` first")
+        return 1
+
+    posting = store.get_posting(fingerprint) or {}
+
     try:
         result = tailor(
             analysis,
@@ -61,20 +139,20 @@ def cmd_tailor(args: argparse.Namespace) -> int:
         )
     except NoFamily as exc:
         print(f"skipped   {exc}")
-        return _done(store, ctx, 0)
+        return 0
     except BaseNotFound as exc:
         print(f"no base   {exc}")
-        return _done(store, ctx, 1)
+        return 1
     except ContractError as exc:
         print(f"REJECTED  {len(exc.violations)} contract violations, nothing was written")
         for violation in exc.violations:
             print(f"  {violation.rule:<26} {violation.where:<20} {violation.detail}")
-        return _done(store, ctx, 1)
+        return 1
     except Fabrication as exc:
         print("REJECTED  the fabrication check refused the changeset")
         for claim in exc.unsupported:
             print(f"  unsupported  {claim}")
-        return _done(store, ctx, 1)
+        return 1
 
     base = result.base
     print(f"posting  {analysis.title[:60]}")
@@ -97,7 +175,7 @@ def cmd_tailor(args: argparse.Namespace) -> int:
     if not args.write:
         print("")
         print("nothing written. re-run with --write to cut the document")
-        return _done(store, ctx, 0)
+        return 0
 
     # The document is cut through the registry, not by calling the renderer here.
     # It is the one write-local act in the daily run, and routing it through the
@@ -122,7 +200,7 @@ def cmd_tailor(args: argparse.Namespace) -> int:
     if not outcome.ok:
         print("")
         print(f"{'DENIED      ' if outcome.denied else 'NOT WRITTEN '} {outcome.error}")
-        return _done(store, ctx, 1)
+        return 1
 
     written = outcome.content
     store.put_tailored(
@@ -141,7 +219,7 @@ def cmd_tailor(args: argparse.Namespace) -> int:
         f"{written['reordered']} reordered"
     )
     print("the page count is yours to check, in Word")
-    return _done(store, ctx, 0)
+    return 0
 
 
 def _done(store: Store, ctx: object, code: int) -> int:
@@ -150,3 +228,52 @@ def _done(store: Store, ctx: object, code: int) -> int:
     if inner is not None:
         inner.close()
     return code
+
+
+def cut_one(
+    store: Store,
+    fingerprint: str,
+    *,
+    engine: str,
+    budget: float,
+    language: str | None = None,
+    force: bool = False,
+) -> Path | None:
+    """Cut one CV for a caller that has a store and nothing else.
+
+    This is what a button press calls. It exists so that `desk inbox` does not
+    have to build a run context, know what a contract is, or reach into a
+    private function — and so that the document a press produces is cut by
+    exactly the code path `desk tailor` uses, rather than by a second one that
+    would drift.
+
+    Returns where the document was written, or None if nothing was. A caller
+    that gets None has a posting Noam approved and no file to send him, which
+    is a state the morning pass will find and retry.
+    """
+    import argparse
+
+    from ..runner import RunSettings, build_context
+
+    contract = load_contract()
+    ctx = build_context(
+        RunSettings(engine=engine, budget_usd=budget, approval_token="local-run")
+    )
+    ctx.contract = contract
+    args = argparse.Namespace(
+        fingerprint=fingerprint,
+        engine=engine,
+        budget=budget,
+        write=True,
+        force=force,
+        language=language,
+    )
+    try:
+        _tailor_one(store, ctx, contract, fingerprint, args)
+    finally:
+        inner = getattr(ctx, "store", None)
+        if inner is not None:
+            inner.close()
+    written = store.tailored(fingerprint) or {}
+    path = str(written.get("path") or "")
+    return Path(path) if path else None

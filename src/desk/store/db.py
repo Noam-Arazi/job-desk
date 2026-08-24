@@ -150,6 +150,12 @@ CREATE TABLE IF NOT EXISTS state_events (
 );
 CREATE INDEX IF NOT EXISTS state_events_fp ON state_events(fingerprint);
 
+CREATE TABLE IF NOT EXISTS channel_cursor (
+    channel     TEXT PRIMARY KEY,
+    position    TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tailored (
     fingerprint  TEXT PRIMARY KEY,
     family       TEXT NOT NULL,
@@ -678,6 +684,27 @@ class Store:
                 "UPDATE pipeline_state SET due_at = ? WHERE fingerprint = ?", (due_at, fingerprint)
             )
         return True
+
+    def cursor(self, channel: str) -> str:
+        """How far this channel has been read. Empty string when never read.
+
+        One row per channel rather than a file next to the database, because
+        losing it and losing the store should be the same event: a cursor that
+        survives a restored backup would skip every button pressed in between,
+        and a press that is skipped is a decision of Noam's that vanished.
+        """
+        row = self.conn.execute(
+            "SELECT position FROM channel_cursor WHERE channel = ?", (channel,)
+        ).fetchone()
+        return str(row["position"]) if row else ""
+
+    def set_cursor(self, channel: str, position: str, *, now: str) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO channel_cursor(channel, position, updated_at)"
+                " VALUES (?,?,?)",
+                (channel, str(position), now),
+            )
 
     def state(self, fingerprint: str) -> dict[str, Any] | None:
         row = self.conn.execute(

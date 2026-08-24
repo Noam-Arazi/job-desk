@@ -28,8 +28,23 @@ desk resolve   collapse duplicates         dry run unless --write
 desk analyze   gates, family, requirements, fit    dry run unless --write
 desk tailor    cut a CV from its base      dry run unless --write
 desk digest    the ranked shortlist        never applies, ever
+desk inbox     act on the buttons          the only inbound path
 desk state     move one posting along      the human's act, recorded
 ```
+
+The shortlist arrives with two buttons under each posting and one under the
+list. ✅ records `approved` and cuts a CV for that posting alone; ✖️ closes it;
+⬇️ pages down the same ranking. Tailoring every ranked posting was built first
+and thrown away — four of the five are jobs the reader would not have applied
+to, and each one is a model call and a file in a folder nobody asked for. So
+the CV follows the decision instead of preceding it.
+
+`desk inbox` is the only thing in this system that reads rather than writes,
+and it is deliberately the narrowest inbound surface that works: no free text,
+no commands, three buttons. A press carries the posting's fingerprint, so it
+cannot name anything the message did not show; both the chat and the account
+are checked against the configured one, so a stranger who finds the bot presses
+nothing. No button applies to anything.
 
 Every one of them is a dry run by default. That is not caution for its own sake: a prompt edit or a spec change should be observable before it is recorded, because what one command stores is what the next one reads.
 

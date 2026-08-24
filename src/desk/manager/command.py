@@ -43,7 +43,7 @@ from pathlib import Path
 
 from ..config import load_spec, paths
 from ..store import Store
-from . import delivery, render, states, timers
+from . import delivery, inbox, render, states, timers
 from . import digest as digest_module
 
 
@@ -75,7 +75,10 @@ def cmd_digest(args: argparse.Namespace) -> int:
             min_score=args.min_score,
             closed=closing,
         )
-        sink.send(render.render(today, args.format))
+        # The buttons ride with the message rather than in one of their own,
+        # so the choice is under the posting it is about. Only the phone gets
+        # them; the terminal prints what they would have said.
+        sink.send(render.render(today, args.format), render.keyboard(today))
         # Attachments after the digest, and before the sweep is written. A CV
         # that cannot be delivered fails the command for the same reason a
         # message that cannot be delivered does, and leaves tomorrow's run the
@@ -88,6 +91,63 @@ def cmd_digest(args: argparse.Namespace) -> int:
     finally:
         store.close()
     return 0
+
+
+def cmd_inbox(args: argparse.Namespace) -> int:
+    """Read the button presses and act on them. The only inbound command.
+
+    It polls once and exits. A resident listener would be a process that is not
+    running on a laptop that sleeps, and Telegram holds an unacknowledged press
+    for 24 hours — so a poll every few minutes loses nothing, and a machine
+    that was shut all night finds yesterday evening's answers still waiting.
+    """
+    spec = load_spec()
+    try:
+        delivery.check_auto_apply(spec)
+        sink = delivery.sink_for(spec, send=True)
+    except delivery.NeverApplies as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    except delivery.DeliveryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    store = Store(paths().ensure().db)
+    try:
+        failed = inbox.run(
+            store,
+            sink,
+            spec=spec,
+            now=datetime.now(),
+            cut=_cutter(store, args),
+        )
+    except delivery.DeliveryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    finally:
+        store.close()
+    return 1 if failed else 0
+
+
+def _cutter(store: Store, args: argparse.Namespace):
+    """What a `y` press does after the state is written: cut that one CV.
+
+    Built here and handed to `inbox.run` so that the inbound module knows
+    nothing about the tailoring stack — and so that a test can watch the
+    presses without a model, a base or a document.
+    """
+    from ..tailor.command import cut_one
+
+    def cut(fingerprint: str) -> Path | None:
+        return cut_one(
+            store,
+            fingerprint,
+            engine=args.engine,
+            budget=args.budget,
+            language=args.language,
+        )
+
+    return cut
 
 
 def _attachments(today: digest_module.Digest) -> list[delivery.Document]:

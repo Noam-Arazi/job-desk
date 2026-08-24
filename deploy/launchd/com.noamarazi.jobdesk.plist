@@ -18,8 +18,8 @@
   is enough — stays hung indefinitely, holds the run, and KeepAlive does not
   rescue it, because from launchd's point of view the job never exited.
 
-  The wrapper runs the whole morning pass — fetch, analyse, deliver — and the
-  four values below are the ones it refuses to start without. Three of them are
+  The wrapper runs the whole morning pass — fetch, analyse, tailor, deliver —
+  and the seven values below are the ones it refuses to start without. Three of them are
   new on 23.08.2026, when the pass stopped being the digest alone: the engine,
   because `replay` against a live store returns recorded answers that look like
   real judgements, and the two ceilings on the analyst, because the only step
@@ -63,7 +63,7 @@
         <string>/Users/noamarazi/job-desk</string>
         <!-- The explicit wall-clock ceiling. The wrapper refuses to run without it. -->
         <key>DESK_TIMEOUT_SECONDS</key>
-        <string>5400</string>
+        <string>7200</string>
 
         <!-- Live judgements, not replayed cassettes. -->
         <key>DESK_ENGINE</key>
@@ -81,6 +81,15 @@
              still goes out over the judgements already in the store. -->
         <key>DESK_ANALYZE_TIMEOUT_SECONDS</key>
         <string>2700</string>
+
+        <!-- The tailoring step, added 24.08.2026, and the same two numbers for
+             the same two reasons. Five documents at most — the digest's own
+             ceiling — so a dollar is generous and a stop is survivable: the
+             CVs already cut are on disk and the digest attaches those. -->
+        <key>DESK_TAILOR_BUDGET_USD</key>
+        <string>1.00</string>
+        <key>DESK_TAILOR_TIMEOUT_SECONDS</key>
+        <string>900</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
@@ -95,7 +104,7 @@
 
     <!-- Grace period after launchd asks the job to stop. Not a run-time limit. -->
     <key>ExitTimeOut</key>
-    <integer>5400</integer>
+    <integer>7200</integer>
 
     <!-- A digest is not a daemon. It runs, it prints, it exits. -->
     <key>RunAtLoad</key>

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The inbound half, added 24.08.2026. The morning pass delivers a shortlist at
+  06:00; this is what notices which postings Noam pressed ✅ on and cuts the CV
+  for those, and only those.
+
+  Why a second job rather than one: the two run on completely different clocks.
+  The pass is one long run a day and it is expensive; this is a one-second poll
+  that has to happen soon after a button is pressed and costs nothing when
+  nothing was. Folding them together would mean either a digest every fifteen
+  minutes or a CV that arrives tomorrow.
+
+  StartInterval and not StartCalendarInterval: there is no hour at which a
+  press happens. The interval is how long Noam waits for a document he just
+  asked for, and 900 seconds is the compromise — short enough that the CV lands
+  while he is still reading the message, long enough that a laptop asleep all
+  day does not wake for nothing. With Power Nap the poll runs inside the short
+  wake windows, which is exactly what the timeout in the wrapper is for.
+
+  Nothing is lost when this does not run. Telegram keeps an unacknowledged
+  update for 24 hours and hands it back until the stored cursor moves past it,
+  so a machine that was shut all evening finds every press still waiting.
+
+  Same rule as the other job: this file is not installed by anything. Copying
+  it into ~/Library/LaunchAgents is a deliberate act by a human, and so is
+  removing it.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.noamarazi.jobdesk.inbox</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/noamarazi/job-desk/deploy/launchd/run-inbox.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/noamarazi/job-desk</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DESK_HOME</key>
+        <string>/Users/noamarazi/job-desk</string>
+
+        <!-- Live judgements, not replayed cassettes. A replayed tailoring
+             returns a recorded document that looks exactly like a real one. -->
+        <key>DESK_ENGINE</key>
+        <string>claude-code</string>
+
+        <!-- One poll cuts at most the documents Noam pressed for since the last
+             one, which in practice is one or two. -->
+        <key>DESK_INBOX_BUDGET_USD</key>
+        <string>1.00</string>
+
+        <!-- Shorter than the interval, on purpose: a poll that is still running
+             when the next one starts is a poll that hung. -->
+        <key>DESK_INBOX_TIMEOUT_SECONDS</key>
+        <string>600</string>
+
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StartInterval</key>
+    <integer>900</integer>
+
+    <key>ExitTimeOut</key>
+    <integer>600</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/noamarazi/job-desk/runs/inbox.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/noamarazi/job-desk/runs/inbox.err.log</string>
+</dict>
+</plist>

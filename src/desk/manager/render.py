@@ -76,6 +76,8 @@ def as_telegram(digest: Digest) -> str:
     without bold text.
     """
     lines: list[str] = [f"job-desk  {digest.date}", _headline(digest)]
+    if digest.offset:
+        lines.append(f"page from {digest.offset + 1}")
     if digest.empty:
         lines += ["", _EMPTY_HE, _EMPTY_EN]
     for position, item in enumerate(digest.items, start=1):
@@ -113,6 +115,41 @@ def as_json(digest: Digest) -> str:
     return json.dumps(digest.as_dict(), ensure_ascii=False, indent=2, sort_keys=True)
 
 
+# What the buttons under a digest say, and what comes back when one is pressed.
+# The labels carry the position number so a press is unambiguous on a screen
+# where five postings scroll past — and the number is the only thing on the
+# button besides a symbol, because a Hebrew word and a Latin digit on one
+# button reorder exactly as they do on one line.
+RELEVANT = "y"
+NOT_RELEVANT = "n"
+MORE = "m"
+
+
+def keyboard(digest: Digest) -> list[list[tuple[str, str]]]:
+    """The choices offered under one digest message.
+
+    Two per posting and one for the page. This is the whole inbound surface of
+    the system: there is no free-text command, nothing here can be typed by
+    accident, and every button names one posting that the same message just
+    showed. A press means "cut a CV for this one" or "I am not interested" —
+    never "apply", which is not an act this system performs at all.
+    """
+    rows: list[list[tuple[str, str]]] = []
+    for position, item in enumerate(digest.items, start=1):
+        rows.append(
+            [
+                (f"✅ {position}", f"{RELEVANT}:{item.fingerprint}"),
+                (f"✖️ {position}", f"{NOT_RELEVANT}:{item.fingerprint}"),
+            ]
+        )
+    if digest.remaining > 0:
+        # The next window starts where this one ended, so paging cannot skip a
+        # posting or show one twice even if the store changed in between.
+        step = min(digest.remaining, digest.max_items)
+        rows.append([(f"⬇️ {step}", f"{MORE}:{digest.offset + len(digest.items)}")])
+    return rows
+
+
 RENDERERS = {"text": as_text, "telegram": as_telegram, "json": as_json}
 
 
@@ -123,10 +160,11 @@ def render(digest: Digest, fmt: str) -> str:
 
 
 def _headline(digest: Digest) -> str:
-    return (
+    line = (
         f"{len(digest.items)} of {digest.considered} shown"
         f"   floor {digest.min_score:.2f}   ceiling {digest.max_items}"
     )
+    return line + (f"   {digest.remaining} below" if digest.remaining else "")
 
 
 def _suppressed(digest: Digest) -> str:

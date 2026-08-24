@@ -17,12 +17,19 @@ version: 1
 # ---------------------------------------------------------------------------
 inputs:
 
-  bases_dir: "~/Desktop/קורות חיים/בסיסים/"
+  # ⚠️ 24.08.2026 — this whole tree moved off ~/Desktop, and the reason is the
+  # scheduled run rather than tidiness. Desktop is TCC-protected: a launchd job
+  # gets "Operation not permitted" there and has no one to answer a consent
+  # prompt, which is exactly how the 06:00 pass died on 24.08. Measured, not
+  # assumed — `ls` on the old bases directory from a launchd context failed
+  # while the same command from a Terminal succeeded. A symlink would not have
+  # helped; the check is on the target.
+  bases_dir: "~/קורות חיים/בסיסים/"
   # Read from disk on every run. Noam edits the bases by hand in Word between
   # rounds; any diff from a cached copy is his deliberate edit, never a bug.
   reread_before_each_run: true
 
-  inventory: "~/Desktop/קורות חיים/experience-2026.md"
+  inventory: "~/קורות חיים/experience-2026.md"
   # The experience inventory. Deliberately OUTSIDE the repo — it carries
   # family and client detail and the repo goes public in session 9.
   # gitignore blocks /spec/experience-*.md. Never copied into the repo,
@@ -242,6 +249,6 @@ review:
     - missing_requirements    # what the posting wanted and the CV does not claim
   auto_send: false            # the system never applies on Noam's behalf
   output:
-    dir: "~/Desktop/קורות חיים/<posting folder>/"
+    dir: "~/קורות חיים/<posting folder>/"
     filename: "נעם_ארזי_קורות_חיים.docx"   # the role name never enters the filename
     format: docx              # Word only, never PDF — Noam edits after

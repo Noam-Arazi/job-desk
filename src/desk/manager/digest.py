@@ -133,6 +133,8 @@ class Digest:
     max_items: int = 0
     considered: int = 0
     suppressed: dict[str, int] = field(default_factory=dict)
+    offset: int = 0
+    remaining: int = 0
 
     @property
     def empty(self) -> bool:
@@ -147,6 +149,8 @@ class Digest:
             "min_score": self.min_score,
             "max_items": self.max_items,
             "considered": self.considered,
+            "offset": self.offset,
+            "remaining": self.remaining,
             "suppressed": dict(sorted(self.suppressed.items())),
             # Stated in the payload and not only in the prose, so a consumer of
             # the JSON reads the same guarantee a reader of the text does.
@@ -175,12 +179,21 @@ def build(
     limit: int | None = None,
     min_score: float | None = None,
     closed: tuple[str, ...] = (),
+    offset: int = 0,
 ) -> Digest:
     """Assemble today's digest from the store.
 
     `limit` and `min_score` override the spec for one run — that is what the
     CLI flags are for, and an override is a deliberate act at a keyboard. When
     they are None the spec decides, which is the case the scheduled run takes.
+
+    `offset` is how far down the same ranking to start, and it is what the
+    "more" button sends back. A page is a window over one ordering rather than
+    a second query: the fifth-best job is the fifth-best job whether it is read
+    at 06:00 or three taps later, and re-ranking between pages would show the
+    same posting twice or skip one silently. `remaining` says how many ranked
+    candidates sit below the window, which is how the caller knows whether to
+    offer another page at all.
 
     `closed` is what today's sweep is closing. It is passed in rather than read,
     because the command commits those closes only after this digest has been
@@ -246,15 +259,19 @@ def build(
         candidates.append(_item(store, analysis, cluster))
 
     ranked = ORDERINGS[order_by](candidates)
+    start = max(0, int(offset))
+    window = max(0, int(ceiling))
     return Digest(
         date=now.date().isoformat(),
-        items=tuple(ranked[: max(0, int(ceiling))]),
+        items=tuple(ranked[start : start + window]),
         follow_ups=tuple(n for n in timers.due(store, now=now) if n.fingerprint not in closing),
         closed=tuple(closed),
         min_score=float(floor),
         max_items=int(ceiling),
         considered=len(candidates),
         suppressed=suppressed,
+        offset=start,
+        remaining=max(0, len(ranked) - start - window),
     )
 
 

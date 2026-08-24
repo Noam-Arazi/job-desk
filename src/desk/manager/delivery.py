@@ -54,6 +54,11 @@ NEVER = "never"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 CAPTION_LIMIT = 1024
 
+# Long enough for a long poll to answer, and finite. The wrapper's clock is the
+# outer bound; this one stops a socket that is open and silent from holding a
+# scheduled run past it.
+_READ_TIMEOUT = 90
+
 REDACTED = "<redacted>"
 
 
@@ -96,6 +101,16 @@ class Document:
         return self
 
 
+# One button: what it says, and what comes back when it is pressed. Telegram
+# caps callback data at 64 bytes, which is a real constraint and not a
+# formality — a fingerprint is 16 characters, so `y:<fingerprint>` fits with
+# room to spare and nothing here ever needs to shorten one and guess later.
+CALLBACK_LIMIT = 64
+
+Button = tuple[str, str]
+Buttons = Sequence[Sequence[Button]]
+
+
 class Sink(Protocol):
     """Two acts: the digest, and the documents it points at.
 
@@ -111,7 +126,7 @@ class Sink(Protocol):
     channel that cannot carry files still delivers the shortlist.
     """
 
-    def send(self, text: str) -> None: ...
+    def send(self, text: str, buttons: Buttons = ()) -> None: ...
 
     def send_documents(self, documents: Sequence[Document]) -> None: ...
 
@@ -124,8 +139,13 @@ class StdoutSink:
     sent: int = 0
     attached: int = 0
 
-    def send(self, text: str) -> None:
+    def send(self, text: str, buttons: Buttons = ()) -> None:
         self.stream.write(text if text.endswith("\n") else text + "\n")
+        for row in buttons:
+            # Printed rather than dropped. A terminal has no buttons, but a
+            # reader debugging what the phone was offered should see the same
+            # choices in the same order, and the callback each one carries.
+            self.stream.write("  ".join(f"[{label}] {data}" for label, data in row) + "\n")
         self.sent += 1
 
     def send_documents(self, documents: Sequence[Document]) -> None:
@@ -177,12 +197,51 @@ class TelegramSink:
             )
         return cls(token, chat_id)
 
-    def send(self, text: str) -> None:
+    def send(self, text: str, buttons: Buttons = ()) -> None:
         import json
 
-        payload = json.dumps({"chat_id": self.chat_id, "text": text}).encode("utf-8")
+        body: dict[str, Any] = {"chat_id": self.chat_id, "text": text}
+        if buttons:
+            body["reply_markup"] = {
+                "inline_keyboard": [
+                    [{"text": label, "callback_data": _callback(data)} for label, data in row]
+                    for row in buttons
+                ]
+            }
+        payload = json.dumps(body).encode("utf-8")
         self._post("sendMessage", payload, "application/json", what="the message")
         self.sent += 1
+
+    def updates(self, *, offset: int = 0, timeout: int = 0) -> list[dict[str, Any]]:
+        """What has arrived since `offset`. The only read this system makes.
+
+        Long-polls for `timeout` seconds, which is Telegram's own mechanism and
+        cheaper than asking repeatedly. `allowed_updates` is narrowed to button
+        presses on purpose: this bot has no conversation, and an update it has
+        no handler for is an update it should not be receiving, let alone
+        storing in a log.
+        """
+        import json
+
+        payload = json.dumps(
+            {
+                "offset": int(offset),
+                "timeout": int(timeout),
+                "allowed_updates": ["callback_query"],
+            }
+        ).encode("utf-8")
+        answer = self._call("getUpdates", payload, "application/json", what="the updates")
+        result = answer.get("result")
+        return list(result) if isinstance(result, list) else []
+
+    def answer_callback(self, callback_id: str, text: str = "") -> None:
+        """Clear the spinner on the button. Telegram shows it until this lands."""
+        import json
+
+        payload = json.dumps({"callback_query_id": callback_id, "text": text[:200]}).encode(
+            "utf-8"
+        )
+        self._post("answerCallbackQuery", payload, "application/json", what="the acknowledgement")
 
     def send_documents(self, documents: Sequence[Document]) -> None:
         """One upload per document, and the first failure stops the rest.
@@ -206,6 +265,11 @@ class TelegramSink:
             self.attached += 1
 
     def _post(self, method: str, body: bytes, content_type: str, *, what: str) -> None:
+        self._call(method, body, content_type, what=what)
+
+    def _call(
+        self, method: str, body: bytes, content_type: str, *, what: str
+    ) -> dict[str, Any]:
         """The one place the token is read, and the one place the network is touched.
 
         Every exception is caught and re-raised carrying only its type name.
@@ -222,15 +286,48 @@ class TelegramSink:
             headers={"Content-Type": content_type},
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=_READ_TIMEOUT) as response:
                 if response.status >= 400:
                     raise DeliveryError(f"telegram refused {what}: HTTP {response.status}")
+                raw = response.read()
         except DeliveryError:
             raise
         except Exception as error:  # noqa: BLE001 - the token must not reach the traceback
             raise DeliveryError(
                 f"telegram delivery failed on {what}: {type(error).__name__}"
             ) from None
+
+        if not raw:
+            return {}
+        try:
+            import json
+
+            answer = json.loads(raw.decode("utf-8"))
+        except Exception:  # noqa: BLE001 - a body that is not JSON is not a token leak either
+            raise DeliveryError(
+                f"telegram answered {what} with something that is not JSON"
+            ) from None
+        if not isinstance(answer, dict) or not answer.get("ok", False):
+            # `description` is Telegram's own words and carries no credential;
+            # the URL, which does, is never part of this string.
+            raise DeliveryError(
+                f"telegram refused {what}: {str(answer.get('description', ''))[:200]}"
+                if isinstance(answer, dict)
+                else f"telegram refused {what}"
+            )
+        return answer
+
+
+def _callback(data: str) -> str:
+    """Refuse to send a button whose answer will not fit in Telegram's field.
+
+    Truncating here would produce a press that comes back as a fingerprint with
+    its tail cut off — an identifier that resolves to nothing, or worse, to
+    something else. Better to fail while building the message.
+    """
+    if len(data.encode("utf-8")) > CALLBACK_LIMIT:
+        raise DeliveryError(f"callback data is over Telegram's {CALLBACK_LIMIT}-byte cap: {data}")
+    return data
 
 
 def telegram_enabled(spec: Mapping[str, Any]) -> bool:

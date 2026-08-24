@@ -69,7 +69,7 @@ def folder_name(*, company: str = "", title: str = "", fingerprint: str = "") ->
     attacker-controlled text on its way to a filesystem path. Stripping the
     separators is not enough: "." and ".." are legal filenames that name a
     directory rather than a new one, and a posting called "." would have put
-    the CV straight into ~/Desktop/קורות חיים/ next to the bases and the
+    the CV straight into ~/קורות חיים/ next to the bases and the
     experience inventory. A name that is nothing but dots, or that starts with
     one, is therefore not a folder name at all and the fingerprint is used.
     """
@@ -87,7 +87,7 @@ def output_root(contract: Mapping[str, Any], *, root: Path | str | None = None) 
     """The directory every tailored document must stay inside."""
     if root is not None:
         return Path(root).expanduser()
-    template = str(contract.get("review", {}).get("output", {}).get("dir", "~/Desktop/"))
+    template = str(contract.get("review", {}).get("output", {}).get("dir", "~/קורות חיים/"))
     head = template.split(FOLDER_PLACEHOLDER)[0] if FOLDER_PLACEHOLDER in template else template
     return Path(head).expanduser()
 
@@ -107,7 +107,7 @@ def output_path(
     here rather than silently write somewhere else.
     """
     output = contract.get("review", {}).get("output", {})
-    template = str(output.get("dir", "~/Desktop/"))
+    template = str(output.get("dir", "~/קורות חיים/"))
     filename = str(output.get("filename", "cv.docx"))
     folder = folder_name(company=company, title=title, fingerprint=fingerprint)
 

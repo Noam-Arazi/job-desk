@@ -1,6 +1,6 @@
 #!/bin/sh
 # The wrapper the launchd job runs. It is the whole morning pass, in order:
-# fetch, analyse, deliver. Before 23.08.2026 it ran only the last of the three,
+# fetch, analyse, tailor, deliver. Before 23.08.2026 it ran only the last of the three,
 # which meant a scheduled morning re-ranked a store nobody had refreshed and
 # sent the same list every day. A digest is a view over the store; it fetches
 # nothing and it judges nothing.
@@ -32,6 +32,8 @@ fail_unset() {
 [ -n "${DESK_ANALYZE_BUDGET_USD:-}" ] || fail_unset DESK_ANALYZE_BUDGET_USD
 [ -n "${DESK_ANALYZE_LIMIT:-}" ]      || fail_unset DESK_ANALYZE_LIMIT
 [ -n "${DESK_ANALYZE_TIMEOUT_SECONDS:-}" ] || fail_unset DESK_ANALYZE_TIMEOUT_SECONDS
+[ -n "${DESK_TAILOR_BUDGET_USD:-}" ]  || fail_unset DESK_TAILOR_BUDGET_USD
+[ -n "${DESK_TAILOR_TIMEOUT_SECONDS:-}" ] || fail_unset DESK_TAILOR_TIMEOUT_SECONDS
 
 DESK_HOME="${DESK_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export DESK_HOME
@@ -117,6 +119,42 @@ set -m
     analyst_clock=$!
     wait "$analyst" || status=1
     kill "$analyst_clock" 2>/dev/null
+
+    # Tailoring, since 24.08.2026, and it cuts for `approved` only — the
+    # postings Noam marked on his phone, never the ones today happens to rank.
+    # Tailoring the whole shortlist was built first and thrown away: it spends
+    # a model call on four jobs out of five he would not have applied to.
+    #
+    # Most mornings this does nothing, and that is the intended shape. The
+    # button he presses cuts the document there and then; this run is the
+    # safety net for a decision made while the laptop was asleep, and for a
+    # cut that failed and is worth one more try.
+    #
+    # Third clock in the pass, and the third instance of the same rule: it
+    # gets its own so that slow tailoring costs its own work rather than the
+    # delivery. A morning that arrives with one CV missing is a good morning.
+    # A morning that arrives with nothing is indistinguishable from a morning
+    # with no matches.
+    "$UV" run --directory "$DESK_HOME" desk tailor --approved \
+        --engine "$DESK_ENGINE" \
+        --budget "$DESK_TAILOR_BUDGET_USD" \
+        --write &
+    cutter=$!
+    (
+        sleep "$DESK_TAILOR_TIMEOUT_SECONDS"
+        kill -TERM "$cutter" 2>/dev/null && {
+            echo "tailoring exceeded ${DESK_TAILOR_TIMEOUT_SECONDS}s and was stopped;" >&2
+            echo "delivering with whatever documents are already on disk" >&2
+            sleep 5
+            kill -KILL "$cutter" 2>/dev/null
+        }
+    ) &
+    cutter_clock=$!
+    wait "$cutter" || {
+        echo "tailoring failed or was stopped; continuing to the delivery" >&2
+        status=1
+    }
+    kill "$cutter_clock" 2>/dev/null
 
     # --send, since 19.08.2026. Telegram is on in the spec and the credentials
     # are in .env, which `desk` reads for itself — launchd cannot export them,

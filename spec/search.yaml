@@ -481,7 +481,14 @@ digest:
     # rest. 06:00 so the whole pass lands before the morning rather than during
     # it, and 5400s so a slow board costs the run time and not the delivery.
     cron: "0 6 * * *"
-    timeout_seconds: 5400          # explicit — Power Nap hangs untimed jobs
+    # ⭐ 24.08.2026 — raised from 5400 when `desk tailor` joined the pass, and
+    # the number is the arithmetic rather than a round one. Measured fetch is
+    # ~2400s, the analyst's own clock is 2700s, tailoring at most five CVs is
+    # given 900s and the digest takes about a minute: 6060s of ceilings inside
+    # a 7200s ceiling. Noam's call to keep 06:00 and widen the window instead
+    # of starting earlier, so the worst morning delivers at 08:00 and a normal
+    # one long before that.
+    timeout_seconds: 7200          # explicit — Power Nap hangs untimed jobs
 
 # ---------------------------------------------------------------------------
 # analyst — session 5

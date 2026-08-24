@@ -5,6 +5,7 @@ desk fetch     scrape one site into the store; a dry run unless --write
 desk analyze   gates, family, requirements and a fit score over the store
 desk tailor    cut a CV from its approved base for one posting
 desk digest    the daily ranked digest; it never applies for you
+desk inbox     act on the buttons pressed on it; the only inbound path
 desk state     show or move where a posting stands
 desk propose   draft a short proposal for one freelance project
 desk evals     score the system against the gold set
@@ -397,6 +398,12 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return run_digest(args)
 
 
+def cmd_inbox(args: argparse.Namespace) -> int:
+    from .manager.command import cmd_inbox as run_inbox
+
+    return run_inbox(args)
+
+
 def cmd_review_duplicates(args: argparse.Namespace) -> int:
     """Judge duplicate pairs by hand, without being shown what was decided.
 
@@ -677,7 +684,16 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.set_defaults(func=cmd_analyze)
 
     tailor = sub.add_parser("tailor", help="cut a CV from its approved base for one posting")
-    tailor.add_argument("--fingerprint", required=True)
+    # One posting by hand, or every posting Noam has marked as relevant.
+    # Exactly one of the two: a run with neither has nothing to cut, and a run
+    # with both would have to decide which selection wins.
+    which = tailor.add_mutually_exclusive_group(required=True)
+    which.add_argument("--fingerprint")
+    which.add_argument(
+        "--approved",
+        action="store_true",
+        help="cut one for every posting Noam marked as relevant, sharing the budget",
+    )
     tailor.add_argument("--engine", choices=ENGINES, default="replay")
     tailor.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")
     tailor.add_argument("--write", action="store_true", help="write the document to disk")
@@ -696,6 +712,14 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)
 
+    # The only command that reads. It polls once and exits — see the note at
+    # the top of manager/inbox.py for why this is not a resident listener.
+    box = sub.add_parser("inbox", help="act on the buttons pressed on the last digest")
+    box.add_argument("--engine", choices=ENGINES, default="replay")
+    box.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")
+    box.add_argument("--language", choices=("he", "en"), default=None)
+    box.set_defaults(func=cmd_inbox)
+
     duplicates = sub.add_parser(
         "review-duplicates", help="judge duplicate pairs by hand, unprompted"
     )
@@ -708,7 +732,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     imports.add_argument(
         "--csv",
-        default=str(Path.home() / "Desktop" / "קורות חיים" / "הגשות.csv"),
+        default=str(Path.home() / "קורות חיים" / "הגשות.csv"),
         help="the tracker to read",
     )
     imports.add_argument("--write", action="store_true", help="record them; otherwise a dry run")
