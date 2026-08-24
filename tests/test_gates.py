@@ -275,10 +275,51 @@ def test_a_year_count_that_is_not_about_experience_is_not_a_requirement(spec) ->
     assert not result.blocks
 
 
-def test_the_lowest_stated_figure_decides(spec) -> None:
-    """A high figure almost always belongs to the nice-to-have half of a list,
-    and the analyst reads the requirements properly in the next stage."""
+def test_the_highest_stated_figure_decides(spec) -> None:
+    """Two demands are two things to satisfy, so the bar is the larger.
+
+    This was the other way round until 24.08.2026, on the reasoning that a high
+    figure usually belongs to the nice-to-have half of a list. Then a real
+    posting opened with "5+ years of experience as a software engineer" and
+    added "2+ years with large language models" further down, and the gate
+    passed it on the two — the lower figure hid the bar rather than softening
+    it. A gate that lets through what it says it blocks teaches its reader that
+    it means nothing, which costs more than the postings it wrongly drops.
+    """
     result = seniority_check(spec, body="ניסיון של 3 שנים ב-SQL, ניסיון של 6 שנים ב-BI")
+
+    assert result.verdict is Verdict.BLOCK
+    assert result.details["years"] == 6
+
+
+def test_the_posting_that_changed_the_rule(spec) -> None:
+    """The real body, in the shape it arrived in."""
+    body = (
+        "What It Takes Experience 5+ years of experience as a software engineer "
+        "or data scientist building production systems. "
+        "2+ years of experience with large language models and NLP techniques."
+    )
+    result = seniority_check(spec, body=body)
+
+    assert result.verdict is Verdict.BLOCK
+    assert result.details["years"] == 5
+
+
+def test_which_figure_decides_is_the_specs_to_change(spec) -> None:
+    loosened = copy.deepcopy(spec)
+    loosened["gates"]["seniority"]["multiple_rule"] = "use_lowest"
+
+    result = seniority_check(loosened, body="ניסיון של 3 שנים ב-SQL, ניסיון של 6 שנים ב-BI")
+
+    assert result.verdict is Verdict.PASS
+    assert result.details["years"] == 3
+
+
+def test_a_range_is_one_demand_and_keeps_its_own_rule(spec) -> None:
+    """"3-5 years" is one requirement stated loosely, not two to satisfy, so the
+    range rule still reads it as 3 and the highest-figure rule does not touch
+    it."""
+    result = seniority_check(spec, body="ניסיון של 3-5 שנים בתפקיד דומה")
 
     assert result.verdict is Verdict.PASS
     assert result.details["years"] == 3

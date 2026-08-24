@@ -116,6 +116,7 @@ def check(
 
     ceiling = int(rules.get("max_required_years", 3))
     range_rule = str(rules.get("range_rule", "use_lower_bound"))
+    multiple_rule = str(rules.get("multiple_rule", "use_highest"))
     unstated = str(rules.get("unstated", "pass"))
 
     # The board's own field, when it filled one. No proximity test here: the
@@ -144,12 +145,18 @@ def check(
             reason="no experience requirement stated; the spec does not treat that as a blocker",
         )
 
-    # The lowest stated figure decides. A posting that asks for three years of
-    # SQL and five of BI is asking for two different things, and the five almost
-    # always belongs to the one that is nice to have. Blocking on the highest
-    # figure would drop the role over a line the human would have shrugged at;
-    # the analyst reads the requirements properly in the next stage.
-    years, start, end = min(anchored, key=lambda f: f[0])
+    # Which of several stated figures decides is the spec's, and it changed on
+    # 24.08.2026. It used to be the lowest, on the reasoning that a high figure
+    # usually belongs to the nice-to-have half of a list. Then a posting opened
+    # with "5+ years of experience as a software engineer" and added "2+ years
+    # with large language models" further down, and the gate passed it on the
+    # two: the lower figure hid the bar instead of softening it.
+    #
+    # A range is one demand expressed loosely and its rule stays its own. Two
+    # separate demands are two things to satisfy, and what has to be cleared is
+    # the larger of them.
+    pick = max if multiple_rule != "use_lowest" else min
+    years, start, end = pick(anchored, key=lambda f: f[0])
     return _verdict(years, ceiling, text, start, end, source="posting text")
 
 

@@ -202,6 +202,24 @@ gates:
     unstated: pass                 # no stated requirement => not a blocker
     range_rule: use_lower_bound    # "3-5 years" is read as 3 and passes;
                                    # switch to use_upper_bound to tighten
+    # ⭐ 24.08.2026 — Noam caught the gate passing a role that opens with "5+
+    # years of experience as a software engineer". It also said "2+ years with
+    # large language models", and the gate took the lower of the two.
+    #
+    # That was the rule, written on the reasoning that a high figure usually
+    # belongs to the nice-to-have half of a list. This posting is the
+    # counter-example that matters: the five was the headline requirement and
+    # the two was the narrow specialty, so the lower figure hid the bar rather
+    # than softening it. Separate demands are not a range — a posting asking
+    # for five years of one thing and two of another is asking for both, and
+    # what a candidate has to clear is the larger.
+    #
+    # Measured before changing it: of 55 candidates at or above the digest
+    # floor, two state more than one figure and exactly one flips to blocked —
+    # the posting that prompted this. A gate that lets through what it says it
+    # blocks costs more than one posting: it teaches the reader the gate means
+    # nothing.
+    multiple_rule: use_highest     # switch to use_lowest for the old behaviour
 
   degree:
     mode: block
