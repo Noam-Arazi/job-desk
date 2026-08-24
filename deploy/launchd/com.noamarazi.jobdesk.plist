@@ -30,6 +30,16 @@
   startup — launchd has no way to export them into this job, and hard-coding a
   token into a plist is a token in a file that is not gitignored.
 
+  Why the paths below are not under ~/Desktop, where this repository lived
+  until 24.08.2026: Desktop is one of the directories macOS protects with TCC,
+  and a launchd job gets no consent prompt to answer. The job ran at 06:00 on
+  24.08 and died on the spot with exit 126 and "Operation not permitted" on
+  this very script — launchd could not so much as read it. Nothing about the
+  code was wrong, which is why the manual test had passed: a Terminal already
+  holds that permission, so running the wrapper by hand exercises a path the
+  scheduled job never takes. The home directory is not protected, so the
+  repository moved there and the block went with it.
+
   This file is not installed by anything. Copying it into ~/Library/LaunchAgents
   is a deliberate act by a human, and so is removing it.
 -->
@@ -41,16 +51,16 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/sh</string>
-        <string>/Users/noamarazi/Desktop/job-desk/deploy/launchd/run-digest.sh</string>
+        <string>/Users/noamarazi/job-desk/deploy/launchd/run-digest.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/noamarazi/Desktop/job-desk</string>
+    <string>/Users/noamarazi/job-desk</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>DESK_HOME</key>
-        <string>/Users/noamarazi/Desktop/job-desk</string>
+        <string>/Users/noamarazi/job-desk</string>
         <!-- The explicit wall-clock ceiling. The wrapper refuses to run without it. -->
         <key>DESK_TIMEOUT_SECONDS</key>
         <string>5400</string>
@@ -96,8 +106,8 @@
     <string>Background</string>
 
     <key>StandardOutPath</key>
-    <string>/Users/noamarazi/Desktop/job-desk/runs/digest.log</string>
+    <string>/Users/noamarazi/job-desk/runs/digest.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/noamarazi/Desktop/job-desk/runs/digest.err.log</string>
+    <string>/Users/noamarazi/job-desk/runs/digest.err.log</string>
 </dict>
 </plist>
