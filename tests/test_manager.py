@@ -1847,3 +1847,43 @@ def test_no_credential_is_written_into_the_inbox_job() -> None:
         text = path.read_text(encoding="utf-8")
         assert delivery.TOKEN_ENV + "=" not in text
         assert "api.telegram.org" not in text
+
+
+def test_the_phone_message_is_five_postings_and_a_sentence_each(store, spec):
+    """24.08.2026: thirty-three applications in flight arrived under five jobs
+    and the message could not be read. A digest nobody reads ranks nothing.
+
+    The phone gets the decision; the terminal keeps the record. Gate verdicts,
+    unstated gates, the other boards a job sits on and every follow-up are all
+    still in `as_text` and in the JSON — none of them is a thing to decide.
+    """
+    for index in range(3):
+        analysed(store, f"fp{index}", score=0.9, reason="the Monday.com work maps onto this " * 8)
+    states.move(store, "old", states.APPLIED, spec=spec, now=NOW,
+                due_at=timers.due_at_for(states.APPLIED, now=NOW, spec=spec))
+    later = NOW + timedelta(days=spec["manager"]["follow_up_days"] + 1)
+    today = build(store, spec, now=later)
+    assert today.follow_ups, "this fixture is pointless without one"
+
+    message = render.as_telegram(today)
+    full = render.as_text(today)
+
+    assert "awaiting a reply" in message
+    assert "old" not in message.replace("job-desk", ""), "no follow-up is listed by name"
+    for line in message.splitlines():
+        assert len(line) <= render.REASON_LIMIT + 2
+    assert "gate" not in message and "unstated" not in message
+    assert "=" not in message, "no gate verdict line reaches the phone"
+    # and none of it was lost, it moved
+    assert "unstated" in full or "gate" in full or "distance" in full
+
+
+def test_the_reason_is_cut_at_a_word_and_marked(store, spec):
+    long_reason = "word " * 60
+    analysed(store, "fp0", score=0.9, reason=long_reason)
+    message = render.as_telegram(build(store, spec))
+
+    sentence = [line for line in message.splitlines() if line.startswith("word")][0]
+    assert sentence.endswith("…")
+    assert len(sentence) <= render.REASON_LIMIT + 1
+    assert not sentence.replace("…", "").endswith(" ")

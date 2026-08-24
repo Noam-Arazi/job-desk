@@ -67,8 +67,25 @@ def as_text(digest: Digest) -> str:
     return "\n".join(lines) + "\n"
 
 
+# What one posting is allowed to say on a phone. The reason the analyst wrote
+# can run to a paragraph; here it is one sentence, because this message is not
+# where a job is studied — it is where it is triaged. Everything the sentence
+# leaves out is still in `desk digest` on the terminal and in the JSON.
+REASON_LIMIT = 110
+
+
 def as_telegram(digest: Digest) -> str:
-    """The phone rendering: the same facts, fewer columns, one hard length cap.
+    """The phone rendering: five postings, one sentence each, and nothing else.
+
+    It used to carry everything the terminal did — gate verdicts, unstated
+    gates, the other boards a job sits on, and every application waiting on a
+    reply. Thirty-three of those arrived under five jobs on 24.08.2026 and Noam
+    could not read the message at all. A digest nobody reads ranks nothing.
+
+    So the phone gets the decision and the terminal keeps the record. What
+    survives here is what a triage needs: how good the fit is, what the job is,
+    who it is with, one sentence of why, and a link. The buttons do the rest,
+    and anything they cannot answer is a question for a bigger screen.
 
     Sent as plain text with no parse mode. A Hebrew job title is full of
     characters that Markdown treats as syntax, and a message that fails to send
@@ -82,32 +99,32 @@ def as_telegram(digest: Digest) -> str:
         lines += ["", _EMPTY_HE, _EMPTY_EN]
     for position, item in enumerate(digest.items, start=1):
         lines.append("")
-        lines.append(f"{position}. {item.score:.2f}  {item.channel}  {item.region}")
+        lines.append(f"{position}.  {item.score:.2f}")
         if item.title:
             lines.append(item.title)
         if item.company:
             lines.append(item.company)
         if item.reason:
-            lines.append(item.reason)
-        if item.gates:
-            lines.append(item.gate_line())
-        if item.unknown_gates:
-            lines.append("unstated: " + ", ".join(item.unknown_gates))
-        if item.also_on:
-            lines.append("also on: " + ", ".join(item.also_on))
+            lines.append(_sentence(item.reason))
         if item.url:
             lines.append(item.url)
-        if item.has_cv:
-            lines.append("cv ready:")
-            lines.append(item.cv_path)
 
+    # The applications already in flight are a count and not a list. They are
+    # nothing to decide about — every one of them is waiting on somebody else —
+    # and as a list they buried the five postings that are.
     if digest.follow_ups:
-        lines += ["", _FOLLOW_UPS_HE]
-        for nudge in digest.follow_ups:
-            lines += _nudge_lines(nudge)
+        lines += ["", f"{len(digest.follow_ups)} awaiting a reply"]
 
-    lines += [""] + list(_NEVER_APPLIES_HE)
+    lines += ["", _NEVER_APPLIES_HE[0]]
     return _cap("\n".join(lines))
+
+
+def _sentence(reason: str) -> str:
+    """One sentence of why, cut at a word rather than mid-word."""
+    text = " ".join(reason.split())
+    if len(text) <= REASON_LIMIT:
+        return text
+    return text[:REASON_LIMIT].rsplit(" ", 1)[0].rstrip(",;:-") + "…"
 
 
 def as_json(digest: Digest) -> str:
