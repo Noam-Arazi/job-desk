@@ -138,6 +138,17 @@ def next_cursor(presses: list[Press], current: str) -> str:
     return str(max(known, highest + 1 if highest else known))
 
 
+def _stamped(log, now):
+    """Every line the poll prints carries the minute it ran.
+
+    Added 24.08.2026 after an hour was spent asking of a log full of identical
+    lines: did the job see that press, or did it run before it? A record with
+    no clock cannot answer the only question anybody asks of it.
+    """
+    prefix = now.strftime("%d.%m %H:%M:%S")
+    return lambda line: log(f"{prefix}  {line}")
+
+
 def run(store, sink, *, spec: dict[str, Any], now, cut, log=print) -> int:
     """Poll once, act on every press, and move the cursor past what was handled.
 
@@ -153,11 +164,12 @@ def run(store, sink, *, spec: dict[str, Any], now, cut, log=print) -> int:
     from . import digest as digest_module
     from . import render, states, timers
 
+    log = _stamped(log, now)
     cursor = store.cursor(CHANNEL)
     updates = sink.updates(offset=int(cursor) if cursor.isdigit() else 0)
     presses = [read(update, chat_id=sink.chat_id) for update in updates]
     if not presses:
-        log("inbox    nothing pressed")
+        log(f"inbox    nothing pressed   (reading from {cursor or 0})")
         return 0
 
     failed = 0
@@ -243,8 +255,11 @@ def _mark(sink, press: Press, render, action: str) -> None:
         return
     try:
         sink.edit_keyboard(press.message_id, render.decided(press.rows, press.fingerprint, action))
-    except Exception:  # noqa: BLE001 - the state is written; the drawing is not the fact
-        pass
+    except Exception as error:  # noqa: BLE001 - the state is written; drawing is not the fact
+        # Swallowed once, and it cost an evening: the decision was recorded and
+        # the screen did not move, which reads exactly like a button that does
+        # nothing. It still must not raise — but it says so now.
+        print(f"unmarked {press.fingerprint[:12]}: {type(error).__name__}: {error}")
 
 
 def _answer(sink, press: Press, text: str) -> None:
