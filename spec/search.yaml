@@ -523,6 +523,24 @@ analyst:
     # scoring a fit nobody will read.
     on_no_family: stop
 
+  extract:
+    # ⭐ 24.08.2026 — the generator half returns nothing at all, sometimes, on a
+    # posting it read correctly a minute earlier. Measured on one real posting
+    # with a plain "Requirements" list: seven requirements, then zero, then
+    # zero, then seven. Same text, same prompt, same model.
+    #
+    # An empty extraction stops the analysis, so the posting silently leaves
+    # the morning without ever being scored — and a posting that vanishes for
+    # no reason is the failure this whole pipeline is built to refuse, because
+    # from the outside it is indistinguishable from a posting that did not
+    # match. It costs one extraction call to ask again, and only on the empty
+    # answer.
+    #
+    # Zero is still a legal answer. A posting that states no requirements
+    # exists, so the retries are finite and the run gives up rather than
+    # looping until the budget is gone.
+    empty_retries: 2
+
   reflect:
     # The evaluator half of the extraction loop. A requirement whose quoted
     # span is not in the posting is not a weak requirement, it is an invented

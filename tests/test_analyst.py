@@ -621,11 +621,60 @@ def test_no_family_stops_before_the_extractor(spec) -> None:
 
 
 def test_an_empty_extraction_stops_before_the_scorer(spec) -> None:
+    """Still a legal answer: a posting may state no requirements at all. What
+    changed on 24.08.2026 is that it is asked again first, not that zero
+    stopped being possible."""
     ask = Ask(extract_requirements=[{"requirements": []}])
     analysis = analyst_for(spec, ask).analyse(candidate())
 
     assert analysis.stopped_at == STOPPED_EXTRACT
     assert "fit_score" not in ask.stages
+
+
+def test_an_extractor_that_comes_back_empty_is_asked_again(spec) -> None:
+    """The generator half is not deterministic, and that cost a real posting.
+
+    Measured 24.08.2026 on one posting with a plain "Requirements" list: seven
+    requirements, then zero, then zero, then seven. Same text, same prompt,
+    same model. An empty answer ends the analysis, so the posting leaves the
+    morning unscored — and from the outside that is indistinguishable from a
+    posting that did not match, which is the one failure this pipeline exists
+    to refuse.
+    """
+    ask = Ask(
+        extract_requirements=[
+            {"requirements": []},
+            payload(requirement(text="SQL", evidence="SQL")),
+        ],
+        reflect_anchors=[{"verdicts": []}],
+        fit_score=[{"score": 0.8, "rationale": "an analytics role", "gaps": []}],
+    )
+    analysis = analyst_for(spec, ask).analyse(candidate())
+
+    assert analysis.stopped_at == ""
+    assert analysis.scored
+    assert ask.stages.count("extract_requirements") == 2
+
+
+def test_the_retry_is_finite_and_the_spec_owns_the_number(spec) -> None:
+    """A posting that truly states nothing must not spend the budget in a loop."""
+    import copy
+
+    tight = copy.deepcopy(spec)
+    tight["analyst"]["extract"]["empty_retries"] = 0
+    ask = Ask(extract_requirements=[{"requirements": []}])
+
+    analysis = analyst_for(tight, ask).analyse(candidate())
+
+    assert analysis.stopped_at == STOPPED_EXTRACT
+    assert ask.stages.count("extract_requirements") == 1
+
+    generous = copy.deepcopy(spec)
+    generous["analyst"]["extract"]["empty_retries"] = 3
+    twice = Ask(extract_requirements=[{"requirements": []}])
+    analyst_for(generous, twice).analyse(candidate())
+
+    assert twice.stages.count("extract_requirements") == 4
 
 
 def test_a_posting_whose_requirements_were_all_invented_stops_at_reflect(spec) -> None:

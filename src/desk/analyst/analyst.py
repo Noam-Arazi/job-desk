@@ -112,7 +112,19 @@ class Analyst:
         if not family.matched:
             return self._stop(candidate, gates, family, STOPPED_FAMILY)
 
-        found = extract.extract(candidate, ask=self.ask, spec=self.spec)
+        # Asked again when it comes back empty, because it does. The same
+        # posting, the same prompt and the same model returned seven
+        # requirements, then none, then none, then seven — and an empty answer
+        # ends the analysis here, so the posting leaves the morning unscored
+        # and looks exactly like one that did not match. The retry costs a call
+        # only on the empty answer, and it is finite: no stated requirement is
+        # a legal thing for a posting to have.
+        attempts = 1 + int(((self.spec.get("analyst") or {}).get("extract") or {}).get(
+            "empty_retries", 0))
+        for _ in range(attempts):
+            found = extract.extract(candidate, ask=self.ask, spec=self.spec)
+            if found:
+                break
         if not found:
             return self._stop(candidate, gates, family, STOPPED_EXTRACT)
 
