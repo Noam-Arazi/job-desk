@@ -34,7 +34,7 @@ failure this file is built to make structurally impossible.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -46,6 +46,7 @@ from .bases import Base, load_for, normalize, tokens
 from .changeset import Change, ChangeSet, Projected
 from .contract import (
     ContractError,
+    Violation,
     allowed_ops,
     forbidden_ids,
     load_contract,
@@ -246,6 +247,93 @@ def propose(
     return ChangeSet.from_dict(response.parsed or {})
 
 
+# Which rejections may be answered by asking again, and which may not.
+#
+# The split is the whole safety of this retry. A mechanical violation says the
+# model mangled an edit — it dropped a word while adding a term, wrote a
+# control character, addressed a line that is not there, ran past a page. The
+# checker's message names the defect precisely, so a second ask is a correction
+# with something to correct against.
+#
+# Everything else is left out, and the set is deliberately this small.
+#
+# The integrity rules — claim_without_evidence, the four Fischer and AI-assist
+# rules, drop_or_weaken_anchor — did not catch a slip. They caught a claim the
+# sources do not support. Telling a model its claim was refused and inviting
+# another attempt is not a correction loop, it is an optimisation loop against
+# the guard, and the thing being optimised is whether a false statement reaches
+# Noam's CV.
+#
+# edit_summary, touch_identity_block and introduce_number are left out for a
+# quieter reason: none of them is a slip either. The prompt states plainly that
+# the summary and the identity block are never touched and that no digit is
+# ever introduced, so a changeset that does those things disregarded an
+# instruction rather than fumbling one. There is nothing precise to hand back.
+#
+# A mixed batch counts as integrity: one rule outside this set on one violation
+# ends the run.
+MECHANICAL = frozenset({"add_new_bullet", "exceed_one_page"})
+
+
+def mechanical_only(violations: Sequence[Violation]) -> bool:
+    """True when every violation is a slip rather than an unsupported claim."""
+    return bool(violations) and all(v.rule in MECHANICAL for v in violations)
+
+
+def render_violations(violations: Sequence[Violation]) -> str:
+    return "\n".join(f"- {v}" for v in violations)
+
+
+def render_changes(changeset: ChangeSet) -> str:
+    return "\n".join(
+        f"- {c.op} @ {c.section}\n  before: {c.before}\n  after:  {c.after}"
+        for c in changeset.changes
+    )
+
+
+def repropose(
+    analysis: Analysis,
+    base: Base,
+    *,
+    ctx: Any,
+    contract: Mapping[str, Any],
+    rejected: ChangeSet,
+    violations: Sequence[Violation],
+) -> ChangeSet:
+    """Stage `repropose_after_contract`. The second and last ask.
+
+    A separate prompt file rather than a sentence appended to the first one, for
+    the reason `analyst.extract` already had to learn: the cassette key is a
+    hash over the prompt, and an addendum built by string concatenation is a
+    prompt with no version and no sha in the trace.
+
+    The posting requirements and the inventory are deliberately not sent again.
+    This ask is not a second attempt at the tailoring question — it is a repair
+    of a changeset that was already judged to be the right edits. Handing back
+    the inventory invites a rewrite, and a rewrite is how the first attempt lost
+    two words off a skills line.
+    """
+    prompt = prompts.load("tailor", "repropose_after_contract", 1)
+    request = LLMRequest(
+        stage="repropose_after_contract",
+        system=(
+            "You correct a rejected changeset. You never write a CV, never add a line, "
+            "and never answer a violation by inventing wording."
+        ),
+        user=prompt.render(
+            rejected=render_changes(rejected),
+            violations=render_violations(violations),
+            rules=render_rules(contract),
+            lines=render_lines(base),
+        ),
+        schema=TAILOR_SCHEMA,
+        prompt_id=prompt.id,
+        prompt_sha256=prompt.sha256,
+    )
+    response = ctx.gateway.complete(request, ctx=ctx)
+    return ChangeSet.from_dict(response.parsed or {})
+
+
 def verify(
     base: Base,
     changeset: ChangeSet,
@@ -316,7 +404,30 @@ def tailor(
     inventory = read_inventory(inventory_file)
 
     changeset = propose(analysis, base, ctx=ctx, contract=rules, inventory=inventory)
-    projected = enforce_contract(base, changeset, contract=rules)
+    # One repair, and only for a mechanical rejection. Before this, a changeset
+    # that dropped a word while adding a term was thrown away whole: the run
+    # printed the violation into a log and Noam, who had pressed the button and
+    # was waiting for a document, got nothing and no reason. The defect was a
+    # rewrite slip the checker could describe exactly, which is the one kind of
+    # failure worth handing back.
+    #
+    # The retry is not a softer gate. What comes back goes through the same
+    # `enforce_contract` with nothing relaxed, and a second rejection raises
+    # exactly as the first one used to.
+    try:
+        projected = enforce_contract(base, changeset, contract=rules)
+    except ContractError as rejection:
+        if not mechanical_only(rejection.violations):
+            raise
+        changeset = repropose(
+            analysis,
+            base,
+            ctx=ctx,
+            contract=rules,
+            rejected=changeset,
+            violations=rejection.violations,
+        )
+        projected = enforce_contract(base, changeset, contract=rules)
     verified, unsupported = verify(base, changeset, ctx=ctx, inventory=inventory)
 
     gaps = _merge_gaps(

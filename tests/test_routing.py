@@ -25,6 +25,7 @@ EXPECTED = {
     "fit_score": SONNET,
     "single_agent_turn": SONNET,
     "tailor_cv": SONNET,
+    "repropose_after_contract": SONNET,
     "freelance_proposal": SONNET,
     "outreach_draft": SONNET,
     "weekly_calibration": OPUS,

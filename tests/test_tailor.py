@@ -1310,3 +1310,132 @@ def test_no_argument_of_the_write_tool_names_a_destination():
     """
     schema = registry.get("write_tailored_cv").input_schema
     assert not set(schema["properties"]) & set(_REACH_PARAMS)
+
+
+# --------------------------------------------------------------------------
+# the one repair, and everything it is not allowed to repair
+# --------------------------------------------------------------------------
+
+
+def _dropped_a_word() -> dict[str, Any]:
+    """The rejection that actually happened on 26.08.2026.
+
+    Noam pressed ✅ on a Data/BI posting. The model added a term to a skills
+    line and reworded the rest of it away, the checker refused the whole
+    changeset, and the run printed the violation into a log nobody reads.
+    """
+    payload = _clean_payload()
+    payload["tailor_cv"]["changes"] = [
+        {
+            "op": cs.ADD_TERM_TO_EXISTING_LINE,
+            "section": "skills.0",
+            "before": SKILL_DATA,
+            "after": "Data: sql, dbt",
+            "source": cs.INVENTORY,
+            "source_line": "Reporting dashboards were rebuilt during the quarterly review.",
+        }
+    ]
+    return payload
+
+
+def test_a_mechanical_rejection_is_handed_back_once_and_can_be_repaired(
+    ctx, bases_dir, inventory
+):
+    payload = _dropped_a_word()
+    payload["repropose_after_contract"] = {
+        "changes": [
+            {
+                "op": cs.ADD_TERM_TO_EXISTING_LINE,
+                "section": "skills.0",
+                "before": SKILL_DATA,
+                "after": SKILL_DATA + ", dbt",
+                "source": cs.INVENTORY,
+                "source_line": "Reporting dashboards were rebuilt during the quarterly review.",
+            }
+        ],
+        "missing_requirements": [],
+    }
+
+    result = run_tailor(ctx, bases_dir, inventory, payload)
+
+    assert ctx.gateway.client.stages == [
+        "tailor_cv",
+        "repropose_after_contract",
+        "verify_no_fabrication",
+    ]
+    assert result.projected.of("skills.0") == SKILL_DATA + ", dbt"
+
+
+def test_the_repair_is_checked_by_the_same_contract_and_not_a_softer_one(
+    ctx, bases_dir, inventory
+):
+    """A retry that could be talked past would be worse than no retry at all."""
+    payload = _dropped_a_word()
+    payload["repropose_after_contract"] = payload["tailor_cv"]
+
+    with pytest.raises(ct.ContractError) as caught:
+        run_tailor(ctx, bases_dir, inventory, payload)
+
+    assert any(v.rule == "add_new_bullet" for v in caught.value.violations)
+
+
+def test_the_repair_happens_at_most_once(ctx, bases_dir, inventory):
+    payload = _dropped_a_word()
+    payload["repropose_after_contract"] = payload["tailor_cv"]
+
+    with pytest.raises(ct.ContractError):
+        run_tailor(ctx, bases_dir, inventory, payload)
+
+    assert ctx.gateway.client.stages.count("repropose_after_contract") == 1
+
+
+def test_an_unsupported_claim_is_refused_once_and_never_asked_again(
+    ctx, bases_dir, inventory
+):
+    """The rule the retry exists to stay away from.
+
+    A rejection for touching the summary is not a fumbled edit — the prompt
+    says plainly that the summary is never touched. Handing that back and
+    inviting another attempt is an optimisation loop against the guard, and
+    what it optimises is whether something Noam did not approve reaches his CV.
+    """
+    payload = _clean_payload()
+    payload["tailor_cv"]["changes"] = [
+        {
+            "op": cs.SWAP_TERMINOLOGY,
+            "section": "summary.0",
+            "before": SUMMARY_TEXT,
+            "after": "A summary tuned to this one posting.",
+            "source": "base",
+            "source_line": SUMMARY_TEXT,
+        }
+    ]
+
+    with pytest.raises(ct.ContractError):
+        run_tailor(ctx, bases_dir, inventory, payload)
+
+    assert ctx.gateway.client.stages == ["tailor_cv"], "no second ask"
+
+
+def test_a_batch_that_mixes_both_kinds_is_treated_as_the_integrity_kind(
+    ctx, bases_dir, inventory
+):
+    """One rule outside the mechanical set on one violation ends the run."""
+    payload = _dropped_a_word()
+    payload["tailor_cv"]["changes"].append(
+        {
+            "op": cs.SWAP_TERMINOLOGY,
+            "section": "summary.0",
+            "before": SUMMARY_TEXT,
+            "after": "A summary tuned to this one posting.",
+            "source": "base",
+            "source_line": SUMMARY_TEXT,
+        }
+    )
+
+    with pytest.raises(ct.ContractError) as caught:
+        run_tailor(ctx, bases_dir, inventory, payload)
+
+    rules = {v.rule for v in caught.value.violations}
+    assert "add_new_bullet" in rules and "edit_summary" in rules
+    assert ctx.gateway.client.stages == ["tailor_cv"], "no second ask"

@@ -113,6 +113,12 @@ TABLE: dict[str, Route] = {
     # would flatter the orchestrated side of the comparison.
     "single_agent_turn": _route("single_agent_turn", SONNET, "medium", thinking=True),
     "tailor_cv": _route("tailor_cv", SONNET, "high", thinking=True),
+    # The repair ask after a mechanical contract rejection. Same tier as the
+    # stage it repairs, and for once that is not caution: the correction is
+    # harder than the original edit, not easier. It has to satisfy the rule it
+    # just broke while keeping every other change intact, and a cheaper model
+    # answering it would spend a second call to be rejected a second time.
+    "repropose_after_contract": _route("repropose_after_contract", SONNET, "high", thinking=True),
     "verify_no_fabrication": _route("verify_no_fabrication", HAIKU, "low"),
     "freelance_proposal": _route("freelance_proposal", SONNET, "medium", thinking=True),
     "outreach_draft": _route("outreach_draft", SONNET, "medium", thinking=True),

@@ -138,13 +138,14 @@ def _cutter(store: Store, args: argparse.Namespace):
     """
     from ..tailor.command import cut_one
 
-    def cut(fingerprint: str) -> Path | None:
+    def cut(fingerprint: str, report=None) -> Path | None:
         return cut_one(
             store,
             fingerprint,
             engine=args.engine,
             budget=args.budget,
             language=args.language,
+            report=report,
         )
 
     return cut

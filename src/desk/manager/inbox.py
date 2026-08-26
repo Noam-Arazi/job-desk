@@ -226,14 +226,31 @@ def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, t
                     note="relevant, by button")
     _answer(sink, press, "מכין קורות חיים")
     _mark(sink, press, render, "y")
-    path = cut(press.fingerprint)
+    # Why the cut refused, if it refuses. Collected rather than sent from
+    # inside the tailoring stack, so this file still knows nothing about what a
+    # contract is — it knows only that a press deserves an answer either way.
+    refusals: list[str] = []
+    path = cut(press.fingerprint, refusals.append)
     if not path:
+        # The press said "cut me a CV" and there is no CV. Saying nothing here
+        # is what made the buttons feel broken: on 26.08.2026 an approval was
+        # refused by the change contract, the reason went to runs/inbox.log,
+        # and the phone showed a ✅ and then silence.
+        _tell(sink, "לא הופק מסמך למשרה הזאת", refusals)
         return f"approved {press.fingerprint[:12]}, no document yet"
 
     from .delivery import Document
 
     sink.send_documents([Document(path=path, caption=_caption(store, press.fingerprint))])
     return f"approved {press.fingerprint[:12]}, document sent"
+
+
+def _tell(sink, headline: str, lines: list[str]) -> None:
+    """Send one plain message. A failure to explain must not raise on its own."""
+    try:
+        sink.send("\n".join([headline, *lines]))
+    except Exception as error:  # noqa: BLE001 - the state is written; telling is not the fact
+        print(f"failed   telling: {type(error).__name__}: {error}")
 
 
 def _caption(store, fingerprint: str) -> str:

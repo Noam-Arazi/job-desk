@@ -33,6 +33,7 @@ clean exit code.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -121,12 +122,33 @@ def _tailor_approved(store: Store, ctx: object, contract: object, args) -> int:
     return 1 if failed else 0
 
 
-def _tailor_one(store: Store, ctx: object, contract: object, fingerprint: str, args) -> int:
-    """One posting, start to finish. Closes nothing: the caller owns the store."""
+def _tailor_one(
+    store: Store,
+    ctx: object,
+    contract: object,
+    fingerprint: str,
+    args,
+    report: Callable[[str], None] | None = None,
+) -> int:
+    """One posting, start to finish. Closes nothing: the caller owns the store.
+
+    `report` is how a refusal escapes this function. Every failure below is
+    printed, and print is enough for a person at a keyboard who is watching the
+    command run. It was not enough for the one caller that matters: a button
+    press on a phone, where the refusal went to `runs/inbox.log` and Noam, who
+    had pressed ✅ and was waiting, saw nothing at all. A cut that produced no
+    document is exactly as much of an answer as one that did, and it has to
+    travel the same way.
+    """
+    def refuse(line: str) -> int:
+        if report is not None:
+            report(line)
+        return 1
+
     analysis = load_analysis(store, fingerprint)
     if analysis is None:
         print(f"no analysis for {fingerprint}; run `desk analyze --write` first")
-        return 1
+        return refuse("אין ניתוח למשרה הזאת עדיין")
 
     posting = store.get_posting(fingerprint) or {}
 
@@ -142,17 +164,27 @@ def _tailor_one(store: Store, ctx: object, contract: object, fingerprint: str, a
         return 0
     except BaseNotFound as exc:
         print(f"no base   {exc}")
-        return 1
+        return refuse(f"לא נמצא בסיס קורות חיים מתאים\n{exc}")
     except ContractError as exc:
         print(f"REJECTED  {len(exc.violations)} contract violations, nothing was written")
         for violation in exc.violations:
             print(f"  {violation.rule:<26} {violation.where:<20} {violation.detail}")
-        return 1
+        # The rule ids travel and the prose does not. They are the words the
+        # contract file uses, so a message on a phone can be looked up in
+        # `spec/change-contract.yaml` without a laptop, and they are short
+        # enough that five of them still read as one line.
+        return refuse(
+            "חוזה קורות החיים חסם את העריכה ולא נכתב מסמך\n"
+            + ", ".join(sorted({v.rule for v in exc.violations}))
+        )
     except Fabrication as exc:
         print("REJECTED  the fabrication check refused the changeset")
         for claim in exc.unsupported:
             print(f"  unsupported  {claim}")
-        return 1
+        return refuse(
+            "בדיקת ההמצאה סירבה — שורה שאין לה מקור בבסיס או במלאי\n"
+            + ", ".join(exc.unsupported)
+        )
 
     base = result.base
     print(f"posting  {analysis.title[:60]}")
@@ -238,6 +270,7 @@ def cut_one(
     budget: float,
     language: str | None = None,
     force: bool = False,
+    report: Callable[[str], None] | None = None,
 ) -> Path | None:
     """Cut one CV for a caller that has a store and nothing else.
 
@@ -269,7 +302,7 @@ def cut_one(
         language=language,
     )
     try:
-        _tailor_one(store, ctx, contract, fingerprint, args)
+        _tailor_one(store, ctx, contract, fingerprint, args, report=report)
     finally:
         inner = getattr(ctx, "store", None)
         if inner is not None:

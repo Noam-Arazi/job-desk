@@ -1705,7 +1705,7 @@ def test_yes_records_the_decision_and_cuts_exactly_one_document(store, spec, tmp
     document.write_bytes(b"docx")
     cut_for: list[str] = []
 
-    def cut(fingerprint):
+    def cut(fingerprint, report=None):
         cut_for.append(fingerprint)
         return document
 
@@ -1726,7 +1726,7 @@ def test_no_closes_the_posting_and_cuts_nothing(store, spec):
     analysed(store, "fp0", score=0.9)
     sink = FakeSink(updates=[press("fp0", action="n")])
 
-    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda _: pytest.fail("cut anyway"),
+    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda *_: pytest.fail("cut anyway"),
               log=lambda *_: None)
 
     assert states.current(store, "fp0") == states.CLOSED
@@ -1744,7 +1744,7 @@ def test_more_sends_the_next_page_with_its_own_buttons(store, spec):
                            "message": {"chat": {"id": 12345}}, "data": "m:5"},
     }])
 
-    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda _: None, log=lambda *_: None)
+    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda *_: None, log=lambda *_: None)
 
     text, buttons = sink.messages[-1]
     assert "page from 6" in text
@@ -1756,7 +1756,7 @@ def test_a_press_naming_a_posting_the_store_does_not_have_is_refused(store, spec
 
     sink = FakeSink(updates=[press("not-a-fingerprint")])
     failed = inbox.run(store, sink, spec=spec, now=NOW,
-                       cut=lambda _: pytest.fail("cut anyway"), log=lambda *_: None)
+                       cut=lambda *_: pytest.fail("cut anyway"), log=lambda *_: None)
 
     assert failed == 0
     assert sink.documents == []
@@ -1771,7 +1771,7 @@ def test_one_press_that_fails_does_not_cost_the_others(store, spec, tmp_path):
     document = tmp_path / "cv.docx"
     document.write_bytes(b"docx")
 
-    def cut(fingerprint):
+    def cut(fingerprint, report=None):
         if fingerprint == "fp0":
             raise RuntimeError("the base would not open")
         return document
@@ -1792,7 +1792,7 @@ def test_the_cursor_moves_past_what_was_handled_and_never_backwards(store, spec)
 
     analysed(store, "fp0", score=0.9)
     sink = FakeSink(updates=[press("fp0", update_id=7)])
-    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda _: None, log=lambda *_: None)
+    inbox.run(store, sink, spec=spec, now=NOW, cut=lambda *_: None, log=lambda *_: None)
 
     assert store.cursor(inbox.CHANNEL) == "8"
     assert inbox.next_cursor([inbox.Press(3, inbox.APPROVE)], "8") == "8"
@@ -1933,7 +1933,7 @@ def test_a_press_marks_the_message_it_was_pressed_on(store, spec, tmp_path):
             edited.append((message_id, [list(row) for row in buttons]))
 
     inbox.run(store, Marking(updates=[update]), spec=spec, now=NOW,
-              cut=lambda _: None, log=lambda *_: None)
+              cut=lambda *_: None, log=lambda *_: None)
 
     assert edited, "the message was never redrawn"
     message_id, buttons = edited[0]
@@ -1972,7 +1972,7 @@ def test_redrawing_the_message_cannot_undo_the_decision(store, spec):
         "inline_keyboard": [[{"text": "✖️ 1", "callback_data": "n:fp0"}]]
     }
     failed = inbox.run(store, Refusing(updates=[update]), spec=spec, now=NOW,
-                       cut=lambda _: None, log=lambda *_: None)
+                       cut=lambda *_: None, log=lambda *_: None)
 
     assert failed == 0
     assert states.current(store, "fp0") == states.CLOSED
@@ -2051,3 +2051,47 @@ def test_the_arrival_count_survives_the_json_rendering(spec, store) -> None:
     analysed(store, "fp1", score=0.9)
 
     assert json.loads(render.as_json(build(store, spec)))["arrivals"] == 1
+
+
+def test_a_press_that_produces_no_document_says_so_on_the_phone(store, spec, tmp_path) -> None:
+    """A ✅ and then silence is what made the buttons feel broken.
+
+    On 26.08.2026 an approval was refused by the change contract. The reason
+    went to runs/inbox.log, the phone showed the tick and nothing else, and the
+    press read as another dead button. A cut that produced no document is as
+    much of an answer as one that did.
+    """
+    from desk.manager import inbox
+
+    analysed(store, "fp1", score=0.9)
+
+    def cut(fingerprint, report=None):
+        if report is not None:
+            report("חוזה קורות החיים חסם את העריכה ולא נכתב מסמך\nadd_new_bullet")
+        return None
+
+    sink = FakeSink(updates=[press("fp1")])
+    inbox.run(store, sink, spec=spec, now=NOW, cut=cut, log=lambda *_: None)
+
+    told = "\n".join(text for text, _ in sink.messages)
+    assert "לא הופק מסמך" in told
+    assert "add_new_bullet" in told
+
+
+def test_the_reason_is_what_the_contract_calls_the_rule(store, spec) -> None:
+    """Rule ids and not prose, so a message on a phone can be looked up in
+    spec/change-contract.yaml without a laptop."""
+    from desk.manager import inbox
+
+    analysed(store, "fp1", score=0.9)
+    seen: list[str] = []
+
+    def cut(fingerprint, report=None):
+        seen.append("called")
+        return None
+
+    sink = FakeSink(updates=[press("fp1")])
+    inbox.run(store, sink, spec=spec, now=NOW, cut=cut, log=lambda *_: None)
+
+    assert seen == ["called"]
+    assert any("לא הופק מסמך" in text for text, _ in sink.messages)
