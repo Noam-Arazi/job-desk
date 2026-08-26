@@ -295,16 +295,22 @@ families:
   data_analyst:
     cv_base: data_analyst
     # Not a BI developer. Power BI and Tableau are coursework; the real
-    # dashboards were built in Monday.com and in code. Kept broad via
-    # the bare term "analyst".
-    terms_he:
+    # dashboards were built in Monday.com and in code.
+    #
+    # The bare words moved to terms_route_only on 26.08.2026. They still decide
+    # the family — "אנליסט" is what makes a posting an analyst posting — but
+    # they are no longer typed into a board, where each of them hit the
+    # six-page ceiling on every site and came back mostly with jobs that match
+    # no family at all.
+    terms_route_only:
       - אנליסט
+      - analyst
+    terms_he:
       - אנליסט נתונים
       - אנליסט דאטה
       - מנתח נתונים
       - אנליסט BI
     terms_en:
-      - analyst
       - data analyst
       - BI analyst
       - business intelligence
@@ -355,23 +361,33 @@ families:
 
   strategy_public:
     cv_base: strategy_public
-    terms_he:
+    # Inflections are listed, not inferred. The family matcher reads the term
+    # as the board wrote it and never guesses at a form it was not given —
+    # the same rule the city lists follow. אסטרטגי alone does not match
+    # אסטרטגיה, so both are here. 2026-08-18.
+    #
+    # All of these are route-only since 26.08.2026, and this family is the
+    # reason the distinction exists. Measured over 2,807 judgements it had
+    # scored 57 postings at an average of 0.10 and had never once cleared the
+    # 0.6 floor, which read like a family to delete — until the matcher was run
+    # against real titles. Without "יועץ" and "אסטרטגי", four strategy titles
+    # in six route to no family, including "יועץ/ת כלכלה ומדיניות, ייעוץ למגזר
+    # הציבורי" and "יועץ/ת עסקי/ת טכנולוגי/ת", both of them applied to at EY.
+    # The words earn their place in the matcher and not in a search box.
+    terms_route_only:
       - יועץ
-      # Inflections are listed, not inferred. The family matcher reads the term
-      # as the board wrote it and never guesses at a form it was not given —
-      # the same rule the city lists follow. אסטרטגי alone does not match
-      # אסטרטגיה, so both are here. 2026-08-18.
       - אסטרטגי
       - אסטרטגיה
       - אסטרטגית
+      - consultant
+      - strategic
+      - strategy
+    terms_he:
       - ייעוץ אסטרטגי
       - טרנספורמציה דיגיטלית
       - שלטון מקומי
       - מערך הדיגיטל
     terms_en:
-      - consultant
-      - strategic
-      - strategy
       - digital transformation
       - public sector
 

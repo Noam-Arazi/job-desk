@@ -97,10 +97,25 @@ def term_index(spec: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
     written in decides nothing here: a Hebrew board writes English role names
     inside Hebrew sentences constantly, and splitting the two would only mean
     asking the same question twice.
+
+    `terms_route_only` is read here and nowhere in the fetching layer, and that
+    asymmetry is the whole point of it. A term does two jobs in this spec: it is
+    typed into a board's search box, and it decides which family a posting that
+    came back belongs to. A word like "יועץ" is indispensable at the second job
+    — it is what makes "יועץ/ת כלכלה ומדיניות" a strategy posting rather than
+    nothing — and ruinous at the first, where AllJobs answers it with six pages
+    of mortgage and insurance advisers. Cutting such a word outright was
+    measured on 26.08.2026 and would have dropped four strategy titles out of
+    six to no family at all, including both of the EY roles already applied to.
+    So it moves here instead: still matched, never queried.
     """
     index: dict[str, tuple[str, ...]] = {}
     for family, config in (spec.get("families") or {}).items():
-        terms = list(config.get("terms_he") or ()) + list(config.get("terms_en") or ())
+        terms = (
+            list(config.get("terms_he") or ())
+            + list(config.get("terms_en") or ())
+            + list(config.get("terms_route_only") or ())
+        )
         seen: dict[str, None] = {}
         for term in terms:
             flat = readable(str(term))

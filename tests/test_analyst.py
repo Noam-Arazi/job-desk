@@ -173,6 +173,53 @@ def test_a_hebrew_prefix_glued_to_a_term_is_still_that_term(spec) -> None:
     assert hits[0].where == families.TITLE
 
 
+def test_a_route_only_term_still_decides_the_family(spec) -> None:
+    """The words that cost the most as queries are the ones the matcher needs.
+
+    "יועץ" answers with six pages of mortgage and insurance advisers when it is
+    typed into AllJobs, and it is also the only thing in the spec that makes
+    "יועץ/ת כלכלה ומדיניות" a strategy posting. `terms_route_only` is where a
+    word goes when both are true.
+    """
+    hits = families.matches(
+        candidate(title="יועץ/ת כלכלה ומדיניות, ייעוץ למגזר הציבורי", body=""),
+        spec=spec,
+    )
+
+    assert [h.family for h in hits] == ["strategy_public"]
+
+
+def test_a_route_only_term_is_never_typed_into_a_board(spec) -> None:
+    """The asymmetry is the whole point: matched, never queried."""
+    from desk.sites.base import search_terms
+
+    queries = search_terms(spec)
+
+    for word in ("יועץ", "אסטרטגי", "אנליסט", "consultant", "strategy", "analyst"):
+        assert word not in queries
+        assert word in families.term_index(spec)["strategy_public"] or word in (
+            families.term_index(spec)["data_analyst"]
+        )
+
+
+def test_the_titles_already_applied_to_still_route_somewhere(spec) -> None:
+    """The regression this split exists to prevent.
+
+    Cutting the broad words outright was measured on 26.08.2026 and dropped
+    four strategy titles in six to no family at all — these two among them, and
+    both had already been applied to at EY. A posting that routes nowhere is
+    dropped silently, which is the one failure mode a shortlist cannot show.
+    """
+    for title in (
+        "יועץ/ת כלכלה ומדיניות, ייעוץ למגזר הציבורי",
+        "יועץ/ת עסקי/ת טכנולוגי/ת",
+        "יועץ/ת אסטרטגי/ת לחברת ייעוץ מובילה",
+        "Strategy Consultant",
+    ):
+        hits = families.matches(candidate(title=title, body=""), spec=spec)
+        assert [h.family for h in hits] == ["strategy_public"], title
+
+
 def test_several_families_in_the_title_go_to_the_model(spec) -> None:
     ask = Ask(route_family=[{"family": "product_project", "confidence": 0.8, "reason": "pm role"}])
 
