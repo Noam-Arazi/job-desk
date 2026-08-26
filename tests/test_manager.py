@@ -1976,3 +1976,78 @@ def test_redrawing_the_message_cannot_undo_the_decision(store, spec):
 
     assert failed == 0
     assert states.current(store, "fp0") == states.CLOSED
+
+
+# --------------------------------------------------------------------------
+# what the morning's scan brought — the line that separates a quiet day from
+# a scrape that did not run
+# --------------------------------------------------------------------------
+
+
+def test_arrivals_counts_the_roles_first_seen_today(spec, store) -> None:
+    analysed(store, "fp1", score=0.9)
+    analysed(store, "fp2", score=0.8)
+
+    assert build(store, spec).arrivals == 2
+
+
+def test_a_role_carried_by_two_boards_is_one_arrival(spec, store) -> None:
+    """One job on four boards is one job. Counted on the posting instead, a
+    board that relists everything would report a busy morning on its own."""
+    analysed(store, "fp1", score=0.9, site="alljobs")
+    store.upsert_posting(
+        Posting(
+            site="drushim",
+            external_id="fp1",
+            title="אנליסט נתונים",
+            company="חברה",
+            location="חיפה",
+            fingerprint="fp1",
+        ),
+        now=stamp(NOW),
+    )
+
+    assert build(store, spec).arrivals == 1
+
+
+def test_a_morning_that_fetched_nothing_says_so_on_the_phone(spec, store) -> None:
+    """The shortlist cannot carry this fact.
+
+    It ranks everything ever judged, so a day the scrape fetched nothing
+    produces the same five postings as a day it fetched two thousand. That is
+    exactly how the fetch stayed broken from 23 to 26 August 2026 behind a
+    digest that looked entirely normal every morning.
+    """
+    analysed(store, "fp1", score=0.9)
+    tomorrow = build(store, spec, now=NOW + timedelta(days=1))
+
+    message = render.as_telegram(tomorrow)
+
+    assert tomorrow.arrivals == 0
+    assert render._NO_ARRIVALS_HE in message
+    assert render._NO_ARRIVALS_EN in message
+
+
+def test_the_warning_sits_above_the_postings_and_not_under_them(spec, store) -> None:
+    """A line printed after five jobs and their links is a line nobody reaches."""
+    analysed(store, "fp1", score=0.9, title="אנליסט נתונים בכיר")
+    tomorrow = build(store, spec, now=NOW + timedelta(days=1))
+
+    message = render.as_telegram(tomorrow)
+
+    assert message.index(render._NO_ARRIVALS_HE) < message.index("אנליסט נתונים בכיר")
+
+
+def test_a_scan_that_brought_postings_reports_the_count_instead(spec, store) -> None:
+    analysed(store, "fp1", score=0.9)
+
+    message = render.as_telegram(build(store, spec))
+
+    assert "1 new roles today" in message
+    assert render._NO_ARRIVALS_HE not in message
+
+
+def test_the_arrival_count_survives_the_json_rendering(spec, store) -> None:
+    analysed(store, "fp1", score=0.9)
+
+    assert json.loads(render.as_json(build(store, spec)))["arrivals"] == 1

@@ -69,6 +69,8 @@ class DigestStore(timers.TimerStore, Protocol):
 
     def tailored(self, fingerprint: str) -> dict[str, Any] | None: ...
 
+    def first_seen_on(self, day: str) -> int: ...
+
 
 @dataclass(frozen=True)
 class Item:
@@ -135,6 +137,11 @@ class Digest:
     suppressed: dict[str, int] = field(default_factory=dict)
     offset: int = 0
     remaining: int = 0
+    # Roles the store met for the first time today. Reported rather than
+    # filtered on: the ranking is over everything judged, not over what arrived
+    # this morning. It is here so the reader can tell a quiet day apart from a
+    # scan that did not run — the two produce an identical shortlist otherwise.
+    arrivals: int = 0
 
     @property
     def empty(self) -> bool:
@@ -151,6 +158,7 @@ class Digest:
             "considered": self.considered,
             "offset": self.offset,
             "remaining": self.remaining,
+            "arrivals": self.arrivals,
             "suppressed": dict(sorted(self.suppressed.items())),
             # Stated in the payload and not only in the prose, so a consumer of
             # the JSON reads the same guarantee a reader of the text does.
@@ -272,6 +280,7 @@ def build(
         suppressed=suppressed,
         offset=start,
         remaining=max(0, len(ranked) - start - window),
+        arrivals=store.first_seen_on(now.date().isoformat()),
     )
 
 

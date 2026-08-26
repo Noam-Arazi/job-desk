@@ -40,6 +40,12 @@ _NEVER_APPLIES_HE = (
 )
 
 _EMPTY_HE = "היום אף פריט לא עבר את רף הציון. יום ריק הוא תשובה תקפה."
+# A scan that brought nothing is reported in the loudest terms the message has.
+# Every board publishes something every day, so zero arrivals is never a quiet
+# morning — it is a fetch that failed, and on 24 and 25 August 2026 it failed
+# for three days behind a digest that looked entirely normal.
+_NO_ARRIVALS_HE = "אזהרה — הסריקה הבוקר לא הביאה אף משרה חדשה. סביר שהיא נכשלה."
+_NO_ARRIVALS_EN = "0 new roles today. every board publishes daily; check the fetch."
 _EMPTY_EN = "nothing cleared the floor. the digest is never padded to fill it."
 
 _FOLLOW_UPS_HE = "מעקב — מה שהוגש וממתין לתשובה"
@@ -54,6 +60,7 @@ def as_text(digest: Digest) -> str:
     ]
     if digest.suppressed:
         lines.append("suppressed  " + _suppressed(digest))
+    lines += _arrivals(digest)
     lines.append("")
 
     if digest.empty:
@@ -93,6 +100,10 @@ def as_telegram(digest: Digest) -> str:
     without bold text.
     """
     lines: list[str] = [f"job-desk  {digest.date}", _headline(digest)]
+    # Above the postings, not below them. A warning that the scan failed is
+    # worth more than the stale shortlist under it, and anything printed after
+    # five jobs and their links is a line Noam scrolls past.
+    lines += _arrivals(digest)
     if digest.offset:
         lines.append(f"page from {digest.offset + 1}")
     if digest.empty:
@@ -209,6 +220,19 @@ def _headline(digest: Digest) -> str:
         f"   floor {digest.min_score:.2f}   ceiling {digest.max_items}"
     )
     return line + (f"   {digest.remaining} below" if digest.remaining else "")
+
+
+def _arrivals(digest: Digest) -> list[str]:
+    """What the morning's scan brought, on its own lines.
+
+    The shortlist alone cannot carry this. It ranks everything ever judged, so
+    a day the scrape fetched nothing produces the same five postings as a day
+    it fetched two thousand — which is exactly how three broken days went
+    unnoticed. The count is the one line that separates them.
+    """
+    if digest.arrivals:
+        return ["", f"{digest.arrivals} new roles today"]
+    return ["", _NO_ARRIVALS_HE, _NO_ARRIVALS_EN]
 
 
 def _suppressed(digest: Digest) -> str:

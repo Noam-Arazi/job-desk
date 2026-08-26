@@ -480,6 +480,25 @@ class Store:
         ).fetchone()
         return str(row[0]) if row else None
 
+    def first_seen_on(self, day: str) -> int:
+        """How many roles the store met for the first time on this date.
+
+        Counted on the fingerprint and not on the posting, because one job
+        carried by four boards is one arrival — the same rule
+        `cluster_first_seen` follows for freshness.
+
+        This is the number that says whether the morning's scan actually ran. A
+        zero here is not a quiet day on the boards; every board publishes
+        something. It is a scrape that fetched nothing, which is what happened
+        on 24 and 25 August 2026 when the fetch extra went missing from the
+        environment and every site failed in a log nobody reads.
+        """
+        row = self.conn.execute(
+            "SELECT COUNT(*) FROM fingerprints WHERE substr(first_seen_at, 1, 10) = ?",
+            (day,),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
     def cluster_first_seen(self, fingerprint: str) -> str | None:
         """The earliest first-seen across everything merged with this role.
 
