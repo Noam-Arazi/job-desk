@@ -97,10 +97,14 @@ set -m
     # watchdog stops the whole pass, which means an analyst that overruns takes
     # the digest down with it and the morning arrives with no message at all.
     # That is the worst outcome available: no delivery reads exactly like a day
-    # with no matches. The analyst writes in one transaction at the end, so a
-    # stopped analyst loses its own work and nothing else — the store still
-    # holds every judgement from the days before, and the digest ranks those.
-    # Better a shortlist one day stale than silence.
+    # with no matches. The analyst stores each verdict as it is made, so a
+    # stopped analyst keeps everything it judged before the signal and loses
+    # only the posting in flight — and the digest ranks the whole store either
+    # way. Better a shortlist one day stale than silence.
+    #
+    # It wrote in one transaction at the end until 26.08.2026, and the kill
+    # below threw that transaction away every morning: the run spent its budget
+    # and stored a single row on 24, 25 and 26 August.
     "$UV" run --directory "$DESK_HOME" desk analyze \
         --engine "$DESK_ENGINE" \
         --budget "$DESK_ANALYZE_BUDGET_USD" \

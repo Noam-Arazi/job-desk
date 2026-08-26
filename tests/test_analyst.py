@@ -963,3 +963,54 @@ def test_re_analysing_does_not_walk_a_posting_backwards(desk_home) -> None:
     store.close()
     assert state["state"] == APPROVED
     assert history == [DISCOVERED, "shortlisted", APPROVED]
+
+
+def test_a_run_killed_mid_batch_keeps_the_verdicts_it_already_made(desk_home, monkeypatch) -> None:
+    """The unattended run is not stopped by its budget.
+
+    `run-digest.sh` sends the analyst SIGTERM once it passes
+    `DESK_ANALYZE_TIMEOUT_SECONDS`, and a signal does not unwind into a write
+    that lives after the loop. When the verdicts were collected in memory and
+    stored at the end, every judgement made before the kill died with the
+    process — the daily run spent its budget and stored one row on 24, 25 and
+    26 August 2026. A `BaseException` is the shape of that kill here: it passes
+    straight through the `except Exception` that catches one bad posting, so
+    only a write that already happened can survive it.
+    """
+    from desk.analyst import command as analyst_command
+    from desk.config import paths
+
+    store = Store(paths().ensure().db)
+    for n in range(3):
+        store.upsert_posting(
+            Posting(
+                site="alljobs",
+                external_id=str(n),
+                title="דרוש /ה אנליסט נתונים",
+                company=f"חברת ביטוח {n}",
+                location="באר שבע",
+                url=f"https://example.test/{n}",
+                body="ניסיון של שנתיים עם SQL",
+                posted_at="2026-08-18T09:00:00",
+            ),
+            now="2026-08-18T09:00:00",
+        )
+    store.close()
+
+    real = analyst_command.analyse_row
+    judged = {"n": 0}
+
+    def kill_on_the_third(analyst, row):
+        judged["n"] += 1
+        if judged["n"] == 3:
+            raise KeyboardInterrupt("SIGTERM")
+        return real(analyst, row)
+
+    monkeypatch.setattr(analyst_command, "analyse_row", kill_on_the_third)
+
+    with pytest.raises(KeyboardInterrupt):
+        cmd_analyze(args_for("--write", "--limit", "5"))
+
+    store = Store(paths().db)
+    assert len(store.analyses()) == 2
+    store.close()

@@ -134,14 +134,31 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     analyses: list[Analysis] = []
     errors: list[str] = []
     halted = ""
+    stamp = now.isoformat(timespec="seconds")
+    discovered = 0
+    # Each verdict is stored the moment it is made, not collected and written
+    # at the end. A budget halt leaves the loop cleanly and either shape would
+    # survive it, but the unattended run is not stopped by its budget — the
+    # launchd script kills the analyst with SIGTERM once it passes
+    # `DESK_ANALYZE_TIMEOUT_SECONDS`, and a signal does not unwind to a write
+    # that lives after the loop. Collected in memory, every judgement made in
+    # those minutes died with the process: the daily run spent its budget and
+    # stored one row on 24, 25 and 26 August. Written per posting, a kill costs
+    # the one posting in flight and the rest are already on disk. Each call
+    # commits on its own, so there is no batch left open to lose.
     for row in rows:
         try:
-            analyses.append(analyse_row(analyst, row))
+            analysis = analyse_row(analyst, row)
         except BudgetExceeded as exc:
             halted = str(exc)
             break
         except Exception as exc:  # noqa: BLE001 — one bad posting is not a failed run
             errors.append(f"{(row.get('fingerprint') or '')[:8]}  {type(exc).__name__}: {exc}")
+            continue
+        analyses.append(analysis)
+        if args.write:
+            _store_analysis(store, analysis, now=stamp)
+            discovered += int(_mark_discovered(store, analysis, spec=spec, now=now))
 
     print(f"store    {len(rows)} postings considered   {'WRITE' if args.write else 'dry run'}")
     print(f"run      {ctx.run_id}   engine={args.engine}")
@@ -177,12 +194,6 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         ctx.store.close()
         return 0 if not errors and not halted else 1
 
-    stamp = now.isoformat(timespec="seconds")
-    discovered = 0
-    for analysis in analyses:
-        _store_analysis(store, analysis, now=stamp)
-        before = _mark_discovered(store, analysis, spec=spec, now=now)
-        discovered += int(before)
     store.close()
     ctx.store.close()
     print("")
