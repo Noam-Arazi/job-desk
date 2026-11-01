@@ -86,15 +86,37 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     fetcher = ThrottledFetcher(HttpFetcher(), throttle)
     now = datetime.now()
 
-    result = MODULES[args.site](
-        fetcher,
-        spec=spec,
-        now=now,
-        max_pages=args.pages,
-        max_age_days=args.max_age,
-        terms=args.term or None,
-        regions=args.region or None,
-    )
+    extra: dict = {}
+    attached = None
+    if args.site in ("linkedin", "jobify"):
+        # Both are read through Noam's signed-in Chrome (deploy/browser).
+        from .sites import browser, jobify, linkedin
+
+        wait_for = (
+            ", ".join(linkedin.DETAIL_FIELDS["body"]) if args.site == "linkedin" else jobify.READY
+        )
+        attached = browser.attach(wait_for=wait_for)
+        print(f"browser  {'attached' if attached else 'not open'}")
+        extra["detail_fetcher"] = attached
+        with Store(paths().ensure().db) as store:
+            extra["have_body"] = {
+                str(row["external_id"]) for row in store.postings_from(args.site) if row["body"]
+            }
+
+    try:
+        result = MODULES[args.site](
+            fetcher,
+            spec=spec,
+            now=now,
+            max_pages=args.pages,
+            max_age_days=args.max_age,
+            terms=args.term or None,
+            regions=args.region or None,
+            **extra,
+        )
+    finally:
+        if attached:
+            attached.close()
 
     print(f"site     {result.site}   {'WRITE' if args.write else 'dry run'}")
     print(f"pages    {result.pages_fetched} fetched at {throttle.interval:.1f}s apart")
@@ -675,6 +697,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     analyze = sub.add_parser("analyze", help="run the analyst over stored postings")
     analyze.add_argument("--limit", type=int, default=20, help="postings to consider")
+    analyze.add_argument(
+        "--max-calls", type=int, default=None,
+        help="stop after this many model calls; every unanalysed posting is considered",
+    )
     analyze.add_argument("--fingerprint", action="append", help="analyse these and nothing else")
     analyze.add_argument("--engine", choices=ENGINES, default="replay")
     analyze.add_argument("--budget", type=float, default=1.00, help="cost ceiling in USD")

@@ -53,7 +53,12 @@ LATIN = re.compile(r"[A-Za-z]")
 
 @pytest.fixture
 def spec() -> dict:
-    return copy.deepcopy(load_spec())
+    # The fixtures here are analyst postings; the rendering does not care which
+    # families are switched on today, so every family is on for these tests.
+    spec = copy.deepcopy(load_spec())
+    for family in spec["families"].values():
+        family.pop("enabled", None)
+    return spec
 
 
 @pytest.fixture
@@ -375,7 +380,7 @@ def test_the_digest_does_not_pad_itself_to_the_ceiling(spec, store) -> None:
 
 
 def test_the_floor_and_the_ceiling_come_from_the_spec(spec, store) -> None:
-    for index in range(6):
+    for index in range(spec["digest"]["max_items"] + 1):
         analysed(store, f"fp{index}", score=0.61 + index / 100)
 
     assert len(build(store, spec).items) == spec["digest"]["max_items"]
@@ -1337,14 +1342,12 @@ def test_the_site_list_is_the_spec_and_the_registry_and_not_a_third_copy() -> No
 
 
 def test_a_site_enabled_with_no_module_is_named_and_not_skipped() -> None:
-    """jobify is enabled in the spec and has no module. Silence would read as ran."""
-    from desk.sites import MODULES
-
-    enabled = [s["id"] for s in load_spec()["sites"] if s.get("enabled")]
-    unbuilt = [s for s in enabled if s not in MODULES]
-    assert unbuilt, "if every enabled site is built, this guarantee needs a new fixture"
+    """A site enabled in the spec with no module is printed, never skipped in
+    silence. Jobify was the live example until it was built on 28.10.2026, so
+    the guarantee is read off the wrapper rather than off today's spec."""
     wrapper = (PLIST.parent / "run-digest.sh").read_text(encoding="utf-8")
-    assert "unbuilt" in wrapper
+    assert "if s not in MODULES" in wrapper
+    assert 'echo "unbuilt  $unbuilt' in wrapper
 
 
 def test_one_failing_board_does_not_cost_the_morning_its_other_sources() -> None:
@@ -1645,6 +1648,7 @@ def test_every_callback_fits_the_field_telegram_gives_it(store, spec):
 def test_the_next_page_is_offered_only_when_there_is_one(store, spec):
     """Noam asked to page past the five. A button that pages into nothing is a
     button that lies about there being more."""
+    spec["digest"]["max_items"] = 5  # the paging is what is tested, not today's page size
     for index in range(7):
         analysed(store, f"fp{index}", score=0.9 - index / 100)
 
@@ -1659,6 +1663,7 @@ def test_the_next_page_is_offered_only_when_there_is_one(store, spec):
 
 
 def test_a_page_is_a_window_over_one_ranking_and_never_repeats_a_posting(store, spec):
+    spec["digest"]["max_items"] = 5  # the paging is what is tested, not today's page size
     for index in range(9):
         analysed(store, f"fp{index}", score=0.9 - index / 100)
 
@@ -2095,3 +2100,15 @@ def test_the_reason_is_what_the_contract_calls_the_rule(store, spec) -> None:
 
     assert seen == ["called"]
     assert any("לא הופק מסמך" in text for text, _ in sink.messages)
+
+
+def test_a_family_switched_off_is_never_offered(store, spec):
+    """28.10.2026: data/BI stopped being a direction. Its postings are still
+    routed, so they are recognised and kept out rather than offered."""
+    analysed(store, "fp-off", score=0.95)
+    spec["families"]["data_analyst"]["enabled"] = False
+
+    today = build(store, spec, now=NOW)
+
+    assert [item.fingerprint for item in today.items] == []
+    assert today.suppressed["family_off"] == 1

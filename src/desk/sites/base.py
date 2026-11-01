@@ -122,9 +122,13 @@ def search_terms(spec: dict[str, Any]) -> list[str]:
     A term that finds nothing is not pruned here. The spec says the width was
     raised deliberately and comes down on measurement in session 5, not on a
     hunch in the fetching layer.
+
+    A family with `enabled: false` is still routed to but never searched for.
     """
     terms: list[str] = []
     for family in spec.get("families", {}).values():
+        if family.get("enabled", True) is False:
+            continue
         for term in [*family.get("terms_he", []), *family.get("terms_en", [])]:
             if term not in terms:
                 terms.append(term)

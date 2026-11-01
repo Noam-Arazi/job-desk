@@ -736,3 +736,91 @@ def test_a_board_the_spec_lists_is_an_israeli_board(spec) -> None:
         spec=spec, location="עבודה מהבית", title="", body="", site="weworkremotely"
     )
     assert foreign.verdict is Verdict.UNKNOWN
+
+
+# seniority — the title outranks every number (28.10.2026)
+
+
+def test_a_senior_title_is_blocked_before_any_year_is_read(spec):
+    result = seniority_check(spec, title="Senior Product Manager", body="2 years of experience")
+    assert result.blocks
+    assert result.details["source"] == "title"
+
+
+def test_a_hebrew_senior_title_is_blocked(spec):
+    assert seniority_check(spec, title="מנהל /ת מוצר בכיר /ה - פינטק").blocks
+
+
+def test_a_title_word_only_blocks_as_a_whole_word(spec):
+    # "sr" inside "isr" and "staff" inside "staffing" are not levels.
+    assert not seniority_check(spec, title="ISR Data Analyst").blocks
+    assert not seniority_check(spec, title="Staffing Coordinator").blocks
+
+
+def test_lead_and_manager_alone_are_not_blocked(spec):
+    assert not seniority_check(spec, title="AI Adoption Lead").blocks
+    assert not seniority_check(spec, title="Product Manager").blocks
+
+
+def test_years_followed_by_what_they_were_spent_on_is_a_requirement(spec):
+    # JFrog, 28.10.2026: no experience word within reach, and it read as silence.
+    body = (
+        "To be an AI Solutions Specialist you need... "
+        "5+ years in a technical role such as software engineering"
+    )
+    assert seniority_check(spec, title="AI Solutions Builder", body=body).blocks
+
+
+def test_a_company_age_is_still_not_a_requirement(spec):
+    body = "The company has been around for 12 years and growing"
+    assert not seniority_check(spec, body=body).blocks
+
+
+# --- 01.11.2026: Noam's three rulings on the digest ---------------------------
+
+
+def test_a_site_blocked_by_name_overrides_the_accepted_cities_around_it(spec) -> None:
+    """The agency listed five towns; the title said the office is in פארק אפק."""
+    result = geography.check(
+        spec=spec,
+        location="מספר מקומות אלעד פתח תקווה ראש העין הוד השרון כפר סבא",
+        title="לחברה מובילה בפארק אפק דרוש /ה אנליסט /ית עסקי /ת",
+    )
+
+    assert result.verdict is Verdict.BLOCK
+    assert "פארק אפק" in result.evidence
+
+
+def test_petah_tikva_with_a_full_office_week_is_blocked(spec) -> None:
+    result = geography.check(
+        spec=spec, location="פתח תקווה", body="משרה מלאה 5 ימים בשבוע 8:00-17:00"
+    )
+
+    assert result.verdict is Verdict.BLOCK
+
+
+def test_petah_tikva_without_a_full_office_week_still_passes(spec) -> None:
+    result = geography.check(spec=spec, location="פתח תקווה", body="משרה מלאה, יום היברידי")
+
+    assert result.verdict is Verdict.PASS
+
+
+def test_a_full_office_week_does_not_block_when_another_accepted_city_is_named(spec) -> None:
+    """A role offered in Petah Tikva and in Haifa is still a role in Haifa."""
+    result = geography.check(
+        spec=spec, location="מספר מקומות פתח תקווה חיפה", body="5 ימים בשבוע"
+    )
+
+    assert result.verdict is Verdict.PASS
+
+
+def test_a_student_position_is_blocked_by_its_title(spec) -> None:
+    result = seniority.check(spec=spec, title="מחפש /ת משרת סטודנט /ית בעולם ה AI", body="")
+
+    assert result.verdict is Verdict.BLOCK
+
+
+def test_a_title_about_students_inside_another_word_is_not_blocked(spec) -> None:
+    result = seniority.check(spec=spec, title="רכז/ת קשרי סטודנטיאדה", body="")
+
+    assert result.verdict is not Verdict.BLOCK

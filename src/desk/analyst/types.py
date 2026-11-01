@@ -117,6 +117,9 @@ class Fit:
     rationale: str = ""
     channel: str = SKIP
     gaps: tuple[str, ...] = ()
+    # The one mandatory demand out of the candidate's reach, quoted, or "".
+    # When set the score has already been capped below the digest floor.
+    knockout: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +127,7 @@ class Fit:
             "rationale": self.rationale,
             "channel": self.channel,
             "gaps": list(self.gaps),
+            **({"knockout": self.knockout} if self.knockout else {}),
         }
 
     @classmethod

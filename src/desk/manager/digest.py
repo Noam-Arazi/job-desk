@@ -219,13 +219,26 @@ def build(
     candidates: list[Item] = []
     seen: set[str] = set()
     closing = set(closed)
-    suppressed = {"applied": 0, "later_state": 0, "blocked": 0, "duplicate": 0, "closed": 0}
+    suppressed = {
+        "applied": 0,
+        "later_state": 0,
+        "blocked": 0,
+        "duplicate": 0,
+        "closed": 0,
+        "family_off": 0,
+    }
+    # A family switched off in the spec is not a direction any more; its
+    # postings are still analysed and routed, they are just not offered.
+    off = {name for name, f in spec.get("families", {}).items() if f.get("enabled", True) is False}
 
     for row in store.analyses(min_score=float(floor)):
         analysis = Analysis.from_json(str(row["payload"]))
         fingerprint = analysis.fingerprint or str(row["fingerprint"])
         if analysis.blocked:
             suppressed["blocked"] += 1
+            continue
+        if analysis.family.family in off:
+            suppressed["family_off"] += 1
             continue
 
         # The cluster is computed and remembered before any suppression, and

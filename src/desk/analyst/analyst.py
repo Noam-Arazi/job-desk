@@ -50,6 +50,11 @@ from .types import (
 )
 
 
+class CallCeiling(Exception):
+    """The run's model-call ceiling is spent. The posting in hand is left
+    unanalysed for the next run; postings the gates settle still go through."""
+
+
 @dataclass
 class Analyst:
     """One configured analyst, reusable across the postings of a single run.
@@ -68,6 +73,7 @@ class Analyst:
     has_applied: Callable[[str], bool] | None = None
     first_run: bool = False
     run_id: str = ""
+    max_calls: int | None = None
     calls: Counter[str] = field(default_factory=Counter)
     stops: Counter[str] = field(default_factory=Counter)
 
@@ -84,6 +90,8 @@ class Analyst:
         """
         if self.gateway is None:
             raise RuntimeError("the analyst was asked for a model call with no gateway attached")
+        if self.max_calls is not None and self.total_calls >= self.max_calls:
+            raise CallCeiling(f"{self.max_calls} model calls")
         self.calls[request.stage] += 1
         return self.gateway.complete(request, ctx=self.ctx).parsed
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from . import alljobs, drushim, gotfriends, linkedin, xplace
+from . import alljobs, drushim, gotfriends, jobify, linkedin, xplace
 from .base import (
     Fetcher,
     RawPosting,
@@ -28,6 +28,7 @@ MODULES: dict[str, Crawler] = {
     alljobs.SITE: alljobs.crawl,
     drushim.SITE: drushim.crawl,
     gotfriends.SITE: gotfriends.crawl,
+    jobify.SITE: jobify.crawl,
     linkedin.SITE: linkedin.crawl,
     xplace.SITE: xplace.crawl,
 }

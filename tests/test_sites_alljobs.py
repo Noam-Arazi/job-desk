@@ -182,8 +182,14 @@ def test_the_crawl_is_driven_by_every_term_in_the_spec() -> None:
 
     assert len(terms) == len(set(terms))  # a term shared by two families is asked once
     for family in spec["families"].values():
+        if family.get("enabled", True) is False:
+            continue
         for term in [*family["terms_he"], *family["terms_en"]]:
             assert term in terms
+
+    # A family switched off keeps routing but is never typed into a board.
+    spec["families"]["data_analyst"]["enabled"] = False
+    assert "אנליסט נתונים" not in alljobs.search_terms(spec)
 
 
 def test_the_term_reaches_the_url_encoded() -> None:

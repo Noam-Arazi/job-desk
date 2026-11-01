@@ -393,6 +393,12 @@ def test_the_command_refuses_to_run_if_the_spec_stops_saying_never(monkeypatch) 
 # --------------------------------------------------------------------------
 
 
+class _Before(date):
+    @classmethod
+    def today(cls) -> date:
+        return date(2026, 9, 1)
+
+
 def _wire(monkeypatch, tmp_path, answer: dict):
     """Point the command at a throwaway store and a stubbed model.
 
@@ -407,6 +413,9 @@ def _wire(monkeypatch, tmp_path, answer: dict):
     from desk.sites.base import RawPosting
 
     monkeypatch.setattr(command, "paths", lambda *a, **k: Paths(tmp_path))
+    # The fixture's bidding closes on 2026-10-05. Read against the real clock
+    # these tests began failing that day, so the command's clock is pinned.
+    monkeypatch.setattr(command, "date", _Before)
 
     project = projects()["215433"]
     raw = RawPosting(

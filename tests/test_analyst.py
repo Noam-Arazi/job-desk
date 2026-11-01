@@ -566,7 +566,7 @@ def test_the_channel_thresholds_come_from_the_spec(spec) -> None:
 def test_the_model_never_names_the_channel(spec) -> None:
     """It is not shown the words and it could not return one if it tried: the
     schema has three keys and channel is not among them."""
-    assert set(score.SCHEMA["required"]) == {"score", "rationale", "gaps"}
+    assert set(score.SCHEMA["required"]) == {"score", "rationale", "gaps", "knockout"}
     request = score.build_request(
         candidate(), Family("data_analyst", 0.9), (requirement(),), spec=spec
     )
@@ -848,7 +848,7 @@ def test_every_stage_schema_validates_through_the_real_gateway(spec, tmp_path) -
         (reflect.build_request(reqs), {"verdicts": []}),
         (
             score.build_request(who, Family("data_analyst", 0.9), reqs, spec=spec),
-            {"score": 0.7, "rationale": "fits", "gaps": []},
+            {"score": 0.7, "rationale": "fits", "gaps": [], "knockout": ""},
         ),
     ]
     for request, answer in answers:
@@ -1061,3 +1061,53 @@ def test_a_run_killed_mid_batch_keeps_the_verdicts_it_already_made(desk_home, mo
     store = Store(paths().db)
     assert len(store.analyses()) == 2
     store.close()
+
+
+def test_a_knockout_caps_the_score_below_the_floor(spec) -> None:
+    # 28.10.2026: JFrog Product Manager scored 0.85 against zero years as a PM.
+    fit = score.fit_from(
+        {
+            "score": 0.85,
+            "rationale": "a PM role",
+            "gaps": [],
+            "knockout": "+2 years of Product Management",
+        },
+        candidate(),
+        spec=spec,
+    )
+    assert fit.score <= score.thresholds(spec)["skip_below"]
+    assert fit.channel == "skip"
+    assert fit.rationale.startswith("knockout:")
+
+
+def test_no_knockout_leaves_the_score_alone(spec) -> None:
+    fit = score.fit_from(
+        {"score": 0.85, "rationale": "fits", "gaps": [], "knockout": ""}, candidate(), spec=spec
+    )
+    assert fit.score == 0.85
+
+
+def test_a_call_ceiling_does_not_ration_free_gate_rejections(desk_home, capsys) -> None:
+    """01.11.2026: the morning limit counted postings, so a gate rejection took
+    a slot like a scored one. Under --max-calls a blocked posting is free and
+    is considered even with a ceiling of zero."""
+    stored(desk_home).close()
+
+    code = cmd_analyze(args_for("--max-calls", "0"))
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "gates 1" in out
+    assert "capped" not in out
+
+
+def test_past_the_call_ceiling_a_posting_that_needs_the_model_waits() -> None:
+    """The ceiling stops the spending and not the run: a posting that would
+    need a call is left unanalysed, so tomorrow's pass picks it up."""
+    from desk.analyst.analyst import Analyst, CallCeiling
+    from desk.llm.base import LLMRequest
+
+    analyst = Analyst(spec={}, gateway=object(), max_calls=0)
+    with pytest.raises(CallCeiling):
+        analyst.ask(LLMRequest.__new__(LLMRequest))
+    assert analyst.total_calls == 0

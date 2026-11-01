@@ -159,6 +159,14 @@ def check(
             reason="the spec names regions but no cities, so no location can be placed",
         )
 
+    # A single site Noam ruled out, named anywhere in the posting. Unlike a
+    # rejected town this overrides the accepted cities around it: an agency
+    # lists five towns, the title says the office is in פארק אפק, and the title
+    # is where the job is.
+    named_block = _named_block(geography, readable(title, location, body))
+    if named_block:
+        return named_block
+
     # The location field first, and only then the prose. A city named in a
     # sentence about the company's other offices is not where the job is.
     where = readable(location)
@@ -173,6 +181,9 @@ def check(
     in_excluded = [h for h in hits if h[1] in excluded]
 
     if in_accepted:
+        full_week = _full_week_block(geography, in_accepted, readable(title, body))
+        if full_week:
+            return full_week
         city, region, at = in_accepted[0]
         return GateResult(
             GATE,
@@ -230,6 +241,49 @@ def check(
         reason="no city this gate recognises and no remote wording",
         evidence=readable(location)[:80],
     )
+
+
+def _named_block(geography: Mapping[str, Any], text: str) -> GateResult | None:
+    names = {readable(str(n)): "named" for n in geography.get("block_when_named") or ()}
+    if not names:
+        return None
+    hits = _found_cities(text, names)
+    if not hits:
+        return None
+    place, _, at = hits[0]
+    return GateResult(
+        GATE,
+        Verdict.BLOCK,
+        reason=f"the posting names {place}, a site the spec blocks wherever it appears",
+        evidence=quote(text, at, at + len(place)),
+        details={"read_from": "title, location and body", "cities": [place]},
+    )
+
+
+def _full_week_block(
+    geography: Mapping[str, Any], in_accepted: list[tuple[str, str, int]], text: str
+) -> GateResult | None:
+    """A town that is worth the drive only when the week is not all office days.
+
+    Blocks only when every accepted city named is one of these towns. A role
+    offered in Petah Tikva and in Haifa is still a role in Haifa.
+    """
+    rule = geography.get("full_week_office_block") or {}
+    towns = {readable(str(t)) for t in rule.get("cities") or ()}
+    if not towns or any(h[0] not in towns for h in in_accepted):
+        return None
+    lowered = text.lower()
+    for phrase in rule.get("phrases") or ():
+        at = lowered.find(readable(str(phrase)).lower())
+        if at != -1:
+            return GateResult(
+                GATE,
+                Verdict.BLOCK,
+                reason=f"{in_accepted[0][0]} with a full office week, which the spec blocks",
+                evidence=quote(text, at, at + len(str(phrase))),
+                details={"cities": [h[0] for h in in_accepted], "source": "full_week_office_block"},
+            )
+    return None
 
 
 def _remote_marker(text: str) -> str:

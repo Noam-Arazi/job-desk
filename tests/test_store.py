@@ -128,8 +128,13 @@ def test_a_store_written_before_that_column_existed_still_opens() -> None:
 
         store = Store(path)
         store.upsert_posting(
-            Posting(site="drushim", external_id="1", title="t", company="c",
-                    stated_experience="3-5 שנים"),
+            Posting(
+                site="drushim",
+                external_id="1",
+                title="t",
+                company="c",
+                stated_experience="3-5 שנים",
+            ),
             now="2026-08-19T09:00:00",
         )
         assert store.all_postings()[0]["stated_experience"] == "3-5 שנים"
@@ -138,14 +143,32 @@ def test_a_store_written_before_that_column_existed_still_opens() -> None:
 
 def _linked(store: Store) -> tuple[str, str]:
     """Two rows for one role, merged by the resolver, as happens across boards."""
-    left = Posting(site="alljobs", external_id="1", title="אנליסט/ית", company="סונול",
-                   location="נתניה", posted_at="2026-08-18T09:00:00")
-    right = Posting(site="drushim", external_id="2", title="דרוש/ה אנליסט/ית", company="",
-                    location="נתניה", posted_at="2026-08-17T09:00:00")
+    left = Posting(
+        site="alljobs",
+        external_id="1",
+        title="אנליסט/ית",
+        company="סונול",
+        location="נתניה",
+        posted_at="2026-08-18T09:00:00",
+    )
+    right = Posting(
+        site="drushim",
+        external_id="2",
+        title="דרוש/ה אנליסט/ית",
+        company="",
+        location="נתניה",
+        posted_at="2026-08-17T09:00:00",
+    )
     store.upsert_posting(left, now="2026-08-18T10:00:00")
     store.upsert_posting(right, now="2026-08-18T10:00:00")
-    store.record_link(left.fingerprint, right.fingerprint, score=0.9, band="duplicate",
-                      method="content", now="2026-08-18T10:00:00")
+    store.record_link(
+        left.fingerprint,
+        right.fingerprint,
+        score=0.9,
+        band="duplicate",
+        method="content",
+        now="2026-08-18T10:00:00",
+    )
     return left.fingerprint, right.fingerprint
 
 
@@ -168,14 +191,19 @@ def test_applying_through_one_board_blocks_the_role_on_the_other() -> None:
 
 
 def test_unseen_postings_is_newest_by_the_date_the_board_printed() -> None:
-    """"Newest first" ordered by rowid, which is crawl order and not time."""
+    """ "Newest first" ordered by rowid, which is crawl order and not time."""
     store = Store()
     for index, (external, posted) in enumerate(
         [("a", "2026-08-01T09:00:00"), ("b", "2026-08-18T09:00:00"), ("c", "2026-08-10T09:00:00")]
     ):
         store.upsert_posting(
-            Posting(site="alljobs", external_id=external, title=f"role {index}",
-                    company=f"company {index}", posted_at=posted),
+            Posting(
+                site="alljobs",
+                external_id=external,
+                title=f"role {index}",
+                company=f"company {index}",
+                posted_at=posted,
+            ),
             now="2026-08-18T10:00:00",
         )
     assert [row["external_id"] for row in store.unseen_postings(2)] == ["b", "c"]
@@ -187,16 +215,82 @@ def test_one_role_is_analysed_once_however_many_boards_carry_it() -> None:
     full extract-and-score chain at judgment tier."""
     store = Store()
     store.upsert_posting(
-        Posting(site="alljobs", external_id="1", title="אנליסט/ית", company="סונול",
-                location="נתניה", posted_at="2026-08-18T09:00:00"),
+        Posting(
+            site="alljobs",
+            external_id="1",
+            title="אנליסט/ית",
+            company="סונול",
+            location="נתניה",
+            posted_at="2026-08-18T09:00:00",
+        ),
         now="2026-08-18T10:00:00",
     )
     store.upsert_posting(
-        Posting(site="drushim", external_id="2", title="אנליסט/ית", company="סונול",
-                location="נתניה", posted_at=""),
+        Posting(
+            site="drushim",
+            external_id="2",
+            title="אנליסט/ית",
+            company="סונול",
+            location="נתניה",
+            posted_at="",
+        ),
         now="2026-08-18T10:00:00",
     )
     rows = store.unanalysed_postings()
     assert len(rows) == 1
     assert rows[0]["site"] == "alljobs", "the copy that carries a date wins"
+    store.close()
+
+
+def test_a_card_only_crawl_never_erases_a_stored_body() -> None:
+    """28.10.2026: every LinkedIn crawl brings most postings back as a card
+    only, and the upsert used to write that empty body over yesterday's."""
+    store = Store()
+    full = Posting(
+        site="linkedin",
+        external_id="7",
+        title="AI Builder",
+        company="Bluewick",
+        body="Build agents.",
+    )
+    card = Posting(site="linkedin", external_id="7", title="AI Builder", company="Bluewick")
+    store.upsert_posting(full, now="2026-10-27T06:00:00")
+    store.upsert_posting(card, now="2026-10-28T06:00:00")
+
+    assert store.get_posting(full.fingerprint)["body"] == "Build agents."
+
+
+def test_an_empty_board_date_does_not_sort_a_posting_last() -> None:
+    """01.11.2026: Jobify and GotFriends store posted_at = '', and COALESCE
+    keeps '' — every one of them sorted below every dated posting and never
+    fit inside the daily limit. 332 of 361 Jobify postings were never read."""
+    store = Store()
+    store.upsert_posting(
+        Posting(site="alljobs", external_id="old", title="a", company="x",
+                posted_at="2026-10-20"),
+        now="2026-10-20T06:00:00",
+    )
+    store.upsert_posting(
+        Posting(site="jobify", external_id="new", title="b", company="y", posted_at=""),
+        now="2026-10-31T06:00:00",
+    )
+    assert [r["site"] for r in store.unanalysed_postings(1)] == ["jobify"]
+    store.close()
+
+
+def test_priority_sites_are_read_before_newer_postings_elsewhere() -> None:
+    store = Store()
+    store.upsert_posting(
+        Posting(site="jobify", external_id="j", title="a", company="x", posted_at=""),
+        now="2026-10-20T06:00:00",
+    )
+    store.upsert_posting(
+        Posting(site="alljobs", external_id="a", title="b", company="y",
+                posted_at="2026-10-31"),
+        now="2026-10-31T06:00:00",
+    )
+    assert [r["site"] for r in store.unanalysed_postings(2)] == ["alljobs", "jobify"]
+    assert [r["site"] for r in store.unanalysed_postings(2, first=("jobify",))] == [
+        "jobify", "alljobs"]
+    assert len(store.unanalysed_postings(None)) == 2
     store.close()

@@ -308,7 +308,7 @@ def test_the_detail_ceiling_is_reported_rather_than_quietly_truncating() -> None
 
     assert sum(1 for p in result.postings if p.body) == 1
     assert result.skipped["a body left unfetched at the detail ceiling"] == 2
-    assert "detail ceiling is 1" in result.notes[0]
+    assert any("detail ceiling is 1" in note for note in result.notes)
 
 
 def test_a_detail_request_that_fails_costs_one_body_and_not_the_run() -> None:
@@ -359,3 +359,39 @@ def test_the_spec_pins_the_logged_out_guest_surface() -> None:
 
     assert entry["fetch"] == "guest_api"
     assert entry["stealth"] is False
+
+
+def test_the_signed_in_page_is_read_too() -> None:
+    """28.10.2026: the attached browser sees LinkedIn signed in, where the
+    description sits in a different element than the guest fragment's."""
+    html = '<main><div data-testid="expandable-text-box">Build agents with RAG.</div></main>'
+    assert linkedin.parse_detail(html)["body"] == "Build agents with RAG."
+
+
+def test_a_body_already_stored_is_not_asked_for_again() -> None:
+    class Counting:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def get(self, url: str) -> str:
+            self.urls.append(url)
+            return "<div class='show-more-less-html__markup'>x</div>"
+
+    search = FixtureFetcher({"start=0": FIXTURE, "start=10": EMPTY})
+    first = linkedin.crawl(
+        search, spec=load_spec(), terms=["data analyst"], max_pages=1, with_details=False
+    )
+    ids = [p.external_id for p in first.postings]
+    browser = Counting()
+
+    linkedin.crawl(
+        search,
+        spec=load_spec(),
+        terms=["data analyst"],
+        max_pages=1,
+        detail_fetcher=browser,
+        have_body=set(ids[1:]),
+    )
+
+    assert len(browser.urls) == 1 and ids[0] in browser.urls[0]
+    assert "/jobs/view/" in browser.urls[0]

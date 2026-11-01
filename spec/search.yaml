@@ -34,8 +34,12 @@ geography:
   # board wrote it and never guesses at a form it was not given, so a variant
   # that is missing here is a posting that is placed nowhere.
   cities:
+    # 28.10.2026 — English spellings added beside every city. LinkedIn writes
+    # "Rehovot, Center District", and with Hebrew-only lists every one of its
+    # postings was placed nowhere and passed on silence.
     haifa:
       - חיפה
+      - Haifa
     north:
       - קרית ביאליק
       - קרית מוצקין
@@ -51,6 +55,20 @@ geography:
       - נצרת
       - עפולה
       - אלון תבור
+      - Kiryat Bialik
+      - Kiryat Motzkin
+      - Kiryat Yam
+      - Kiryat Ata
+      - Krayot
+      - Akko
+      - Acre
+      - Nesher
+      - Tirat Carmel
+      - Yokneam
+      - Karmiel
+      - Migdal HaEmek
+      - Nazareth
+      - Afula
     sharon:
       - רמת השרון        # ✅ נועם, 18.08.2026 — היחידה שנשארה מהרשימה
       - נתניה
@@ -59,6 +77,14 @@ geography:
       - הרצליה
       - קיסריה
       - חדרה
+      - Ramat HaSharon
+      - Netanya
+      - Kfar Saba
+      - Raanana
+      - Ra'anana
+      - Herzliya
+      - Caesarea
+      - Hadera
     center:
       # 167 of the 191 AllJobs rows write the abbreviation and never the name.
       - ת"א
@@ -74,7 +100,16 @@ geography:
       - בני ברק
       - חולון
       - ראשון לציון
-      - רחובות
+      - Tel Aviv
+      - Tel-Aviv
+      - Ramat Gan
+      - Givatayim
+      - Petah Tikva
+      - Petach Tikva
+      - Bnei Brak
+      - Holon
+      - Rishon LeZion
+      - Rishon Lezion
     south:
       - באר שבע
       - אשדוד
@@ -83,10 +118,21 @@ geography:
       - דימונה
       - אילת
       - שדרות
+      - Beer Sheva
+      - Be'er Sheva
+      - Ashdod
+      - Ashkelon
+      - Kiryat Gat
+      - Dimona
+      - Eilat
+      - Sderot
     jerusalem:
       - ירושלים
       - מבשרת ציון
       - בית שמש
+      - Jerusalem
+      - Mevaseret Zion
+      - Beit Shemesh
 
   # ✅ נועם, 18.08.2026: מתוך 83 המחרוזות שהשער לא הצליח למקם, רק רמת השרון
   # נשארת. כל השאר יוצאות.
@@ -108,6 +154,16 @@ geography:
       - אור יהודה
       - קרית שדה התעופה
       - נמל תעופה בן גוריון
+      # 28.10.2026 — Noam: Rehovot is not relevant. Moved out of center.
+      - רחובות
+      - Rehovot
+      - Lod
+      - Modi'in
+      - Modiin
+      - Rosh HaAyin
+      - Rosh Ha'Ayin
+      - Or Yehuda
+      - Airport City
       - רמלה
       - נהריה
       - שוהם
@@ -183,6 +239,39 @@ geography:
       - זכרון יעקב
       - כפר רופין
       - גן יאשיה
+
+  # ✅ נועם, 01.11.2026: פארק אפק נפסל.
+  #
+  # A site, not a town, and blocked wherever the posting names it — title,
+  # location or body. This one overrides the any-accepted-city rule above on
+  # purpose: the posting that prompted it listed אלעד, פתח תקווה, ראש העין, הוד
+  # השרון, כפר סבא as an agency's catchment and said in its title that the
+  # office is in פארק אפק. The title was right and the list was noise.
+  block_when_named:
+    - פארק אפק
+    - Park Afek
+    - Afek Park
+
+  # ✅ נועם, 01.11.2026: פתח תקווה נפסלת כשכתוב 5 ימים בשבוע.
+  #
+  # The town stays in center. It is blocked only when every accepted city the
+  # posting names is on this list AND the text states a full office week, so a
+  # hybrid role there still reaches the digest.
+  full_week_office_block:
+    cities:
+      - פתח תקווה
+      - פתח תקוה
+      - Petah Tikva
+      - Petach Tikva
+    phrases:
+      - 5 ימים בשבוע
+      - חמישה ימים בשבוע
+      - 5 ימי עבודה
+      - חמישה ימי עבודה
+      - א'-ה'
+      - 5 days a week
+      - five days a week
+      - 5 days in the office
   remote:
     israel_based: true
     international: false
@@ -220,6 +309,40 @@ gates:
     # blocks costs more than one posting: it teaches the reader the gate means
     # nothing.
     multiple_rule: use_highest     # switch to use_lowest for the old behaviour
+    # 28.10.2026 — a title at one of these levels is blocked before any year
+    # is read, and before any model call. Whole words only. Bare "lead" and
+    # "manager" are deliberately absent: "AI Adoption Lead" and "Product
+    # Manager" are titles Noam applies to.
+    title_block_terms:
+      - senior
+      - sr.
+      - sr
+      - principal
+      - staff
+      - director
+      - head of
+      - vp
+      - vice president
+      - team lead
+      - tech lead
+      - בכיר
+      - בכירה
+      - סניור
+      - ראש צוות
+      - ראש תחום
+      - ראש מחלקה
+      # ✅ נועם, 01.11.2026: משרת סטודנט נפסלת. Below the level, not above it,
+      # and the same machinery: a word in the title, before any model call.
+      # "intern" is deliberately absent until Noam rules on it.
+      - סטודנט
+      - סטודנטית
+      - סטודנטים
+      - סטודנטיות
+      - student
+      - students
+      - ראש אגף
+      - דירקטור
+      - סמנכ"ל
 
   degree:
     mode: block
@@ -294,6 +417,8 @@ families:
 
   data_analyst:
     cv_base: data_analyst
+    # 28.10.2026 — switched off and back on the same day: Noam is not closing
+    # any direction yet. `enabled: false` here is how to switch it off again.
     # Not a BI developer. Power BI and Tableau are coursework; the real
     # dashboards were built in Monday.com and in code.
     #
@@ -317,6 +442,14 @@ families:
 
   ai_builder:
     cv_base: ai_builder
+    # 28.10.2026 — real 2026 titles the literal match missed ("ai ops
+    # engineer" does not contain "ai engineer"). Route-only: they decide the
+    # family but are not typed into a board.
+    terms_route_only:
+      - AI ops
+      - AI architect
+      - agentic systems
+      - solutions implementer
     # "מהנדס" titles almost always carry a closed degree list — they are
     # kept in, and the degree gate is what removes them.
     # "Copilot" deliberately excluded: no hands-on experience with it.
@@ -331,7 +464,19 @@ families:
       - מומחה אוטומציה
       - הטמעת AI
       - RAG
+      # 28.10.2026 — segment 1: AI enablement inside non-tech organisations
+      # (banks, insurers, health funds, government).
+      - הטמעת בינה מלאכותית
+      - מוביל AI
+      - טרנספורמציית AI
     terms_en:
+      - AI enablement
+      - AI transformation
+      - AI champion
+      - AI implementation
+      - AI deployment
+      - GenAI consultant
+      - forward deployed
       - AI engineer
       - AI builder
       - AI developer
@@ -387,9 +532,13 @@ families:
       - טרנספורמציה דיגיטלית
       - שלטון מקומי
       - מערך הדיגיטל
+      - יועץ AI                    # 28.10.2026 — KPMG / EY / Deloitte line
+      - ייעוץ טכנולוגי
     terms_en:
       - digital transformation
       - public sector
+      - AI consultant
+      - technology consultant
 
 # ---------------------------------------------------------------------------
 # sites — built one at a time, in this order
@@ -464,6 +613,8 @@ sites:
     location: Israel               # the endpoint takes a place name, not a code
     window_days: 7                 # applied by LinkedIn, not by us
     max_details: 200               # one request each; the ceiling is reported
+    max_details_browser: 400       # 28.10.2026 — through Noam's open Chrome (deploy/browser),
+                                   # in-direction titles first; ~3s a page, ~20 minutes
     notes: >
       Two logged-out endpoints, no account, no cookie, no key: a search that
       takes a term, a place and a window, and a posting page that carries the
@@ -497,7 +648,7 @@ sites:
 # daily digest
 # ---------------------------------------------------------------------------
 digest:
-  max_items: 5
+  max_items: 10                    # 28.10.2026 — Noam: ten a morning, was five
   min_score: 0.6                   # an empty day is a valid answer
   order_by: score_desc
   include_per_item:
@@ -514,7 +665,12 @@ digest:
     # ran. Throttle alone is ~30 minutes of that; parsing and writing are the
     # rest. 06:00 so the whole pass lands before the morning rather than during
     # it, and 5400s so a slow board costs the run time and not the delivery.
-    cron: "0 6 * * *"
+    # ⭐ 01.11.2026 — moved to 04:00 at Noam's request: the pass's model calls
+    # open a subscription usage window, and starting at 04:00 lets that window
+    # roll over by ~09:30, when he sits down. The analyst is now capped by
+    # model calls (400), not postings, so its clock went to 6600s and the
+    # pass to 10800s: 2400 fetch + 6600 analyse + 900 tailor + digest.
+    cron: "0 4 * * *"
     # ⭐ 24.08.2026 — raised from 5400 when `desk tailor` joined the pass, and
     # the number is the arithmetic rather than a round one. Measured fetch is
     # ~2400s, the analyst's own clock is 2700s, tailoring at most five CVs is
@@ -522,7 +678,7 @@ digest:
     # a 7200s ceiling. Noam's call to keep 06:00 and widen the window instead
     # of starting earlier, so the worst morning delivers at 08:00 and a normal
     # one long before that.
-    timeout_seconds: 7200          # explicit — Power Nap hangs untimed jobs
+    timeout_seconds: 10800         # explicit — Power Nap hangs untimed jobs
 
 # ---------------------------------------------------------------------------
 # analyst — session 5
@@ -531,6 +687,10 @@ digest:
 # a code change.
 # ---------------------------------------------------------------------------
 analyst:
+
+  # Read first by the morning pass, before the newest-first bulk boards.
+  # 01.11.2026 — Jobify is where Noam's best matches have come from.
+  priority_sites: [jobify]
 
   family:
     min_confidence: 0.5
@@ -571,6 +731,12 @@ analyst:
       skip_below: 0.6        # the digest floor: below it nothing is recommended
       person_min: 0.8        # a direct approach is worth it only on a strong
                              # fit, and only where the employer is named at all
+    # 28.10.2026 — a mandatory demand Noam cannot meet ("2+ years of product
+    # management" against zero) caps the score here, below skip_below. The
+    # ledger is local and gitignored; without it the scorer judges the family
+    # alone and no knockout fires.
+    ledger: data/candidate.yaml
+    knockout_cap: 0.3
 
 # ---------------------------------------------------------------------------
 # manager — session 7

@@ -38,6 +38,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+import yaml
+
+from ..config import paths
 from ..gates.chain import Candidate
 from ..llm.base import LLMRequest
 from ..prompts import load as load_prompt
@@ -53,8 +56,9 @@ SCHEMA: dict[str, Any] = {
         "score": {"type": "number"},
         "rationale": {"type": "string"},
         "gaps": {"type": "array", "items": {"type": "string"}},
+        "knockout": {"type": "string"},
     },
-    "required": ["score", "rationale", "gaps"],
+    "required": ["score", "rationale", "gaps", "knockout"],
     "additionalProperties": False,
 }
 
@@ -77,6 +81,29 @@ def thresholds(spec: Mapping[str, Any]) -> dict[str, float]:
         "skip_below": float(channel.get("skip_below", 0.6)),
         "person_min": float(channel.get("person_min", 0.8)),
     }
+
+
+def knockout_cap(spec: Mapping[str, Any]) -> float:
+    return float(((spec.get("analyst") or {}).get("score") or {}).get("knockout_cap", 0.3))
+
+
+def ledger(spec: Mapping[str, Any]) -> str:
+    """What the candidate has, by role type and in years — not the inventory.
+
+    28.10.2026. The scorer used to see only what the CV family stands for, so
+    "Product Manager" scored 0.85 because a product CV exists, against zero
+    years as a product manager. The ledger is a short local file (data/ is
+    gitignored) and a machine without one judges the family alone, as before.
+    """
+    rel = ((spec.get("analyst") or {}).get("score") or {}).get("ledger", "data/candidate.yaml")
+    path = paths().root / rel
+    if not path.exists():
+        return "(no ledger on this machine: judge the family alone, and leave knockout empty)"
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    lines = [f"- total professional years: {data.get('total_years', '?')}"]
+    lines += [f"- {role}: {years} years" for role, years in (data.get("roles") or {}).items()]
+    lines += [f"- does not have: {skill}" for skill in data.get("skills_absent") or ()]
+    return "\n".join(lines)
 
 
 def employer_named(candidate: Candidate) -> bool:
@@ -123,7 +150,7 @@ def build_request(
     spec: Mapping[str, Any],
 ) -> LLMRequest:
     """Built in one place so the recorder and the run always agree on the key."""
-    prompt = load_prompt("analyst", "fit_score", 1)
+    prompt = load_prompt("analyst", "fit_score", 2)
     listing = (
         "\n".join(
             f"- [{r.kind}] {'must' if r.mandatory else 'nice to have'}: {r.text}"
@@ -138,6 +165,7 @@ def build_request(
             family=family.family,
             cv_base=cv_base(spec, family.family),
             claims=claims(spec, family.family),
+            ledger=ledger(spec),
             title=candidate.title,
             company=candidate.company or "(not stated)",
             location=candidate.location or "(not stated)",
@@ -170,11 +198,19 @@ def fit_from(parsed: Any, candidate: Candidate, *, spec: Mapping[str, Any]) -> F
         return Fit(0.0, "the scorer returned nothing usable", SKIP, ())
     score = _clamp(parsed.get("score"))
     gaps = tuple(str(g).strip() for g in (parsed.get("gaps") or ()) if str(g).strip())
+    rationale = str(parsed.get("rationale", "")).strip()
+    # The model names the knockout; the cap is applied here, in code, so a
+    # high number next to a stated knockout can never reach the digest.
+    knockout = str(parsed.get("knockout") or "").strip()
+    if knockout:
+        score = min(score, knockout_cap(spec))
+        rationale = f"knockout: {knockout}"
     return Fit(
         score=score,
-        rationale=str(parsed.get("rationale", "")).strip(),
+        rationale=rationale,
         channel=channel_for(score, named=employer_named(candidate), spec=spec),
         gaps=gaps[:MAX_GAPS],
+        knockout=knockout,
     )
 
 

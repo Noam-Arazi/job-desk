@@ -65,6 +65,14 @@ _WORDS = re.compile(rf"(?<![א-ת])(?:{_WORD_ALONE}|(?:{_WORD_WITH_UNIT})\s+{_UN
 # diploma. It is a year count, it sits a comma away from the word for
 # experience, and it is not a seniority bar — it was the single loudest false
 # block on the first run over the store.
+# 28.10.2026 — "5+ years in a technical role such as software engineering"
+# names no experience word within reach, so the gate read it as silence and
+# passed JFrog's AI Solutions Builder on to a 0.82. A year count followed
+# directly by what the years were spent on is a requirement in its own right.
+# Only the English forms: the Hebrew boards say "שנות ניסיון", which the
+# proximity test already catches.
+_ROLE_TAIL = re.compile(r"\s*(?:of|in|as|at|working|hands-on|building|delivering|leading)\b")
+
 _SCHOOLING = re.compile(r"\s*(?:לימוד|לימודים|schooling|education)")
 
 
@@ -119,6 +127,24 @@ def check(
     multiple_rule = str(rules.get("multiple_rule", "use_highest"))
     unstated = str(rules.get("unstated", "pass"))
 
+    # 28.10.2026 — the title outranks every number. Noam: a posting titled
+    # senior is not worth his time or the tokens, whatever the body says. Most
+    # of them state no years at all, so the year rules below let them through
+    # on silence and the model paid to score them — 27 were scored, five
+    # cleared the digest floor. The words are the spec's; matching is on word
+    # boundaries so "sr" does not fire inside another word.
+    title_text = readable(title)
+    for term in rules.get("title_block_terms") or ():
+        match = _title_term(str(term)).search(title_text)
+        if match:
+            return GateResult(
+                GATE,
+                Verdict.BLOCK,
+                reason=f"the title says {term!r}, a level the spec blocks",
+                evidence=quote(title_text, match.start(), match.end()),
+                details={"source": "title"},
+            )
+
     # The board's own field, when it filled one. No proximity test here: the
     # field is the experience requirement, so the number in it is never a
     # coincidence.
@@ -132,7 +158,9 @@ def check(
 
     text = readable(title, body)
     figures = years_required(text, range_rule=range_rule)
-    anchored = [f for f in figures if near(text, f[1], _EXPERIENCE_WORDS)]
+    anchored = [
+        f for f in figures if near(text, f[1], _EXPERIENCE_WORDS) or _ROLE_TAIL.match(text, f[2])
+    ]
 
     if not anchored:
         if unstated == "block":
@@ -158,6 +186,12 @@ def check(
     pick = max if multiple_rule != "use_lowest" else min
     years, start, end = pick(anchored, key=lambda f: f[0])
     return _verdict(years, ceiling, text, start, end, source="posting text")
+
+
+def _title_term(term: str) -> re.Pattern[str]:
+    # Latin and Hebrew letters both count as "inside a word": "בכיר" must not
+    # fire inside "בכירות" and "sr" must not fire inside "isr".
+    return re.compile(rf"(?<![A-Za-zא-ת]){re.escape(term.lower())}(?![A-Za-zא-ת])")
 
 
 def _verdict(

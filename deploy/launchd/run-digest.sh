@@ -81,6 +81,11 @@ set -m
 
 (
     status=0
+    # 28.10.2026 — LinkedIn descriptions are read through Noam's own Chrome
+    # profile. If the window was closed it is reopened here; its sign-ins live
+    # in the profile and survive. Failing to open it costs details, not the run.
+    "$DESK_HOME/deploy/browser/start-chrome.sh" || echo "job-desk chrome did not start" >&2
+    sleep 5
     for site in $runnable; do
         # A board that is down, rate-limiting or newly re-laid-out must not cost
         # the morning its other four sources. It is recorded and the pass goes on.
@@ -108,7 +113,7 @@ set -m
     "$UV" run --directory "$DESK_HOME" desk analyze \
         --engine "$DESK_ENGINE" \
         --budget "$DESK_ANALYZE_BUDGET_USD" \
-        --limit "$DESK_ANALYZE_LIMIT" \
+        --max-calls "$DESK_ANALYZE_LIMIT" \
         --write &
     analyst=$!
     (

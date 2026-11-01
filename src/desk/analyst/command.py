@@ -25,7 +25,7 @@ from ..gates.chain import store_first_seen
 from ..llm.base import BudgetExceeded
 from ..runner import RunSettings, build_context
 from ..store import Store
-from .analyst import Analyst, analyse_row
+from .analyst import Analyst, CallCeiling, analyse_row
 from .types import (
     STOPPED_EXTRACT,
     STOPPED_FAMILY,
@@ -38,7 +38,9 @@ from .types import (
 STAGES = (STOPPED_GATES, STOPPED_FAMILY, STOPPED_EXTRACT, STOPPED_REFLECT)
 
 
-def _rows(store: Store, args: argparse.Namespace) -> list[dict[str, Any]]:
+def _rows(
+    store: Store, args: argparse.Namespace, spec: Mapping[str, Any]
+) -> list[dict[str, Any]]:
     """Which postings this pass considers.
 
     Named fingerprints override everything, including `--all`: re-running one
@@ -51,7 +53,11 @@ def _rows(store: Store, args: argparse.Namespace) -> list[dict[str, Any]]:
         return [row for row in found if row]
     if args.all:
         return store.all_postings()[: args.limit]
-    return store.unanalysed_postings(args.limit)
+    first = tuple(((spec.get("analyst") or {}).get("priority_sites")) or ())
+    # Under a call ceiling every unanalysed posting is considered: the gates
+    # and the term router are free, so they are not what the ceiling rations.
+    limit = None if getattr(args, "max_calls", None) is not None else args.limit
+    return store.unanalysed_postings(limit, first=first)
 
 
 def _line(analysis: Analysis) -> str:
@@ -109,7 +115,7 @@ def _store_analysis(store: Store, analysis: Analysis, *, now: str) -> None:
 def cmd_analyze(args: argparse.Namespace) -> int:
     spec: Mapping[str, Any] = load_spec()
     store = Store(paths().ensure().db)
-    rows = _rows(store, args)
+    rows = _rows(store, args, spec)
     if not rows:
         print("nothing to analyse; run `desk fetch --site <id> --write` first")
         print("(everything in the store may already be analysed — try --all)")
@@ -146,9 +152,20 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     # stored one row on 24, 25 and 26 August. Written per posting, a kill costs
     # the one posting in flight and the rest are already on disk. Each call
     # commits on its own, so there is no batch left open to lose.
+    max_calls = getattr(args, "max_calls", None)
+    analyst.max_calls = max_calls
+    capped = 0
     for row in rows:
+        # The ceiling counts model calls, not postings. Until 01.11.2026 the
+        # limit counted postings, and a gate rejection — no call, no cost —
+        # took a slot like any other: 400 a day considered, 17 scored. Past
+        # the ceiling the loop goes on, because the gates are still free; a
+        # posting that needs the model is left unanalysed for tomorrow.
         try:
             analysis = analyse_row(analyst, row)
+        except CallCeiling:
+            capped += 1
+            continue
         except BudgetExceeded as exc:
             halted = str(exc)
             break
@@ -169,6 +186,11 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     print(f"tokens   in={total.input_tokens} out={total.output_tokens} cost=${total.cost_usd:.6f}")
     if halted:
         print(f"halted   budget: {halted}")
+    if capped:
+        print(
+            f"capped   {max_calls} model calls reached, "
+            f"{capped} postings need the model and wait for tomorrow"
+        )
     if errors:
         # Stated as a count as well as a list, so the funnel above adds up. A
         # posting that raised produced no analysis and is in none of the stage

@@ -34,3 +34,4 @@ build/
 # contents are nobody else's business. Untracked 23.08.2026, before the repo went
 # public. It stays on disk and it stays out of git.
 STATUS.md
+/.claude/worktrees/

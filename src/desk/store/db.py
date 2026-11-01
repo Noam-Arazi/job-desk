@@ -271,7 +271,11 @@ class Store:
                     title       = excluded.title,
                     company     = excluded.company,
                     location    = excluded.location,
-                    body        = excluded.body,
+                    -- A crawl that did not reach a posting's detail page brings
+                    -- back its card only. That is not news that the description
+                    -- vanished, so an empty body never overwrites a stored one.
+                    body        = CASE WHEN excluded.body <> '' THEN excluded.body
+                                       ELSE postings.body END,
                     url         = excluded.url,
                     posted_at   = excluded.posted_at,
                     stated_experience = excluded.stated_experience,
@@ -339,7 +343,7 @@ class Store:
             SELECT p.* FROM postings p
             JOIN (SELECT fingerprint, MIN(id) AS id FROM postings GROUP BY fingerprint) d
               ON d.id = p.id
-            ORDER BY COALESCE(p.posted_at, p.fetched_at) DESC
+            ORDER BY COALESCE(NULLIF(p.posted_at, ''), p.fetched_at) DESC
             """
         ).fetchall()
         out: list[dict[str, Any]] = []
@@ -585,35 +589,48 @@ class Store:
         sql += " ORDER BY score DESC"
         return [dict(r) for r in self.conn.execute(sql, args).fetchall()]
 
-    def unanalysed_postings(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Postings with no analysis row yet, newest first.
+    def unanalysed_postings(
+        self, limit: int | None = 50, *, first: tuple[str, ...] = ()
+    ) -> list[dict[str, Any]]:
+        """Postings with no analysis row yet, the `first` sites ahead, newest first.
+
+        An empty `posted_at` falls back to `fetched_at`. Jobify and GotFriends
+        store '' rather than NULL, and COALESCE keeps '' — so until 01.11.2026
+        every one of them sorted last and never fit inside the daily limit:
+        332 of 361 Jobify postings were collected and never read.
+
+        `first` is the spec's `analyst.priority_sites`. Jobify is where Noam's
+        best matches have come from, so it is read before the bulk boards.
 
         Duplicates are excluded here rather than in the analyst: a cluster the
         resolver already merged is one role, and paying to score it twice is
         the exact cost the resolver exists to avoid.
         """
+        rank = " ".join(f"WHEN ? THEN {i}" for i in range(len(first)))
         rows = self.conn.execute(
             "SELECT p.* FROM postings p"
             " LEFT JOIN analyses a ON a.fingerprint = p.fingerprint"
             " WHERE a.fingerprint IS NULL"
-            " ORDER BY COALESCE(p.posted_at, p.fetched_at) DESC",
+            f" ORDER BY {f'CASE p.site {rank} ELSE {len(first)} END, ' if first else ''}"
+            "COALESCE(NULLIF(p.posted_at, ''), p.fetched_at) DESC",
+            first,
         ).fetchall()
-        # One row per fingerprint, and the ordering above decides which one
-        # survives: a board that prints a date wins over one that does not.
+        # One row per fingerprint. The ordering above decides where a role
+        # stands in the queue; which copy is analysed is the one that carries
+        # a board date, when any does, since the freshness gate reads it.
         # Returning both copies meant `desk analyze --all` paid for a full
         # extract-and-score chain twice on the same role and stored the second
         # answer over the first — 72 of them in the live store.
-        seen: set[str] = set()
-        out: list[dict[str, Any]] = []
+        chosen: dict[str, dict[str, Any]] = {}
         for row in rows:
-            if len(out) >= limit:
-                break
             fingerprint = str(row["fingerprint"])
-            if fingerprint in seen:
-                continue
-            seen.add(fingerprint)
-            out.append(dict(row))
-        return out
+            held = chosen.get(fingerprint)
+            if held is None:
+                chosen[fingerprint] = dict(row)
+            elif not held.get("posted_at") and row["posted_at"]:
+                chosen[fingerprint] = dict(row)
+        out = list(chosen.values())
+        return out if limit is None else out[:limit]
 
     # -- where each posting stands ----------------------------------------
 

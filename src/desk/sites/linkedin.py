@@ -80,6 +80,9 @@ SITE = "linkedin"
 
 SEARCH_URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
 DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+# The same posting as a page, for the attached browser. It renders the same
+# description markup as the guest fragment, so `parse_detail` reads both.
+VIEW_URL = "https://www.linkedin.com/jobs/view/{job_id}/"
 
 # The offset step LinkedIn actually serves. Asking for more per call does not
 # change it, so it is stated once here rather than assumed at three call sites.
@@ -101,7 +104,12 @@ FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 DETAIL_FIELDS: dict[str, tuple[str, ...]] = {
-    "body": ("div.show-more-less-html__markup", "div.description__text"),
+    # The third is the signed-in page the attached browser sees (28.10.2026).
+    "body": (
+        "div.show-more-less-html__markup",
+        "div.description__text",
+        "[data-testid='expandable-text-box']",
+    ),
     "criteria_key": ("h3.description__job-criteria-subheader",),
     "criteria_value": ("span.description__job-criteria-text",),
 }
@@ -285,8 +293,23 @@ def url_for(term: str, start: int, *, days: int, location: str) -> str:
     return f"{SEARCH_URL}?{urlencode(params)}"
 
 
+def in_direction(title: str, spec: dict[str, Any]) -> bool:
+    """Whether the title alone routes to a family that is switched on. Free:
+    the router runs without a model when `ask` is left out."""
+    from ..analyst import families
+    from ..gates.chain import Candidate
+
+    family = families.route(Candidate(title=title, body="", site=SITE), spec=spec).family
+    config = (spec.get("families") or {}).get(family)
+    return config is not None and config.get("enabled", True) is not False
+
+
 def detail_url(job_id: str) -> str:
     return DETAIL_URL.format(job_id=job_id)
+
+
+def view_url(job_id: str) -> str:
+    return VIEW_URL.format(job_id=job_id)
 
 
 def settings_from_spec(spec: dict[str, Any]) -> dict[str, Any]:
@@ -296,8 +319,9 @@ def settings_from_spec(spec: dict[str, Any]) -> dict[str, Any]:
             return {
                 "location": str(entry.get("location", "Israel")),
                 "max_details": int(entry.get("max_details", 200)),
+                "max_details_browser": int(entry.get("max_details_browser", 400)),
             }
-    return {"location": "Israel", "max_details": 200}
+    return {"location": "Israel", "max_details": 200, "max_details_browser": 400}
 
 
 def crawl(
@@ -309,6 +333,8 @@ def crawl(
     days: int = 7,
     with_details: bool = True,
     max_details: int | None = None,
+    detail_fetcher: Fetcher | None = None,
+    have_body: set[str] | None = None,
     **_ignored: Any,
 ) -> SiteResult:
     """Walk each term's offsets until LinkedIn says there is nothing more.
@@ -321,10 +347,20 @@ def crawl(
 
     A term that raises is recorded and the walk moves on. One broken query
     never ends the crawl.
+
+    `detail_fetcher` is the attached browser when Noam's window is up: details
+    are read there, from the page view, under the larger browser budget.
+    `have_body` names the external ids the store already holds a description
+    for, which are not asked for again — the budget goes to the ones missing.
     """
     settings = settings_from_spec(spec)
     location = settings["location"]
-    detail_budget = settings["max_details"] if max_details is None else max_details
+    via_browser = detail_fetcher is not None
+    default_budget = settings["max_details_browser" if via_browser else "max_details"]
+    detail_budget = default_budget if max_details is None else max_details
+    details = detail_fetcher or fetcher
+    url_of = view_url if via_browser else detail_url
+    known = have_body or set()
 
     result = SiteResult(site=SITE)
     found: dict[str, RawPosting] = {}
@@ -368,10 +404,21 @@ def crawl(
             stops.append(f"{term!r}: hit the {max_pages}-offset ceiling")
 
     if with_details:
-        wanted = [p for p in found.values() if not p.body]
+        wanted = [p for p in found.values() if not p.body and p.external_id not in known]
+        # The budget is spent on the postings a title already places in a
+        # direction Noam is pursuing, and only then on the rest. Scan order
+        # used to decide it, and most of the 200 went to roles no family wants.
+        wanted.sort(key=lambda p: not in_direction(p.title, spec))
+        if known:
+            result.notes.append(
+                f"{sum(1 for i in found if i in known)} postings already had a body in the store"
+            )
+        result.notes.append(
+            f"details via {'the attached browser' if via_browser else 'the logged-out endpoint'}"
+        )
         for posting in wanted[:detail_budget]:
             try:
-                detail = parse_detail(fetcher.get(detail_url(posting.external_id)))
+                detail = parse_detail(details.get(url_of(posting.external_id)))
             except Exception as exc:
                 result.errors.append(f"detail {posting.external_id}: {exc}")
                 skipped["a detail request that failed"] = (
