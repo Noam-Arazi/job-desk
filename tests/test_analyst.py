@@ -1130,3 +1130,30 @@ def test_the_ledger_tells_the_scorer_held_or_not_and_never_the_years(tmp_path, m
     assert "has never held: product manager" in text
     assert "has done: specification documents" in text
     assert "1.5" not in text and "years" not in text
+
+
+def test_three_failures_in_a_row_halt_the_run(desk_home, capsys, monkeypatch) -> None:
+    """01.11.2026: the evening passes run until the usage window is spent, and
+    a spent window fails every call. Three in a row is the engine, not a
+    posting, and the run stops instead of walking the backlog through it."""
+    from desk.analyst import command as analyze_command
+    from desk.config import paths
+
+    store = Store(paths().ensure().db)
+    for n in range(5):
+        store.upsert_posting(
+            Posting(site="jobify", external_id=str(n), title=f"role {n}", company="x"),
+            now="2026-11-01T17:00:00",
+        )
+    store.close()
+    seen: list[str] = []
+
+    def failing(analyst, row):
+        seen.append(row["external_id"])
+        raise RuntimeError("usage limit reached")
+
+    monkeypatch.setattr(analyze_command, "analyse_row", failing)
+    assert cmd_analyze(args_for("--max-calls", "100")) == 1
+    out = capsys.readouterr().out
+    assert len(seen) == 3
+    assert "3 postings failed in a row" in out

@@ -689,8 +689,9 @@ digest:
 analyst:
 
   # Read first by the morning pass, before the newest-first bulk boards.
-  # 01.11.2026 — Jobify is where Noam's best matches have come from.
-  priority_sites: [jobify]
+  # 01.11.2026 — Jobify is where Noam's best matches have come from, and
+  # GotFriends had 200 never read. Both before the newest-first bulk boards.
+  priority_sites: [jobify, gotfriends]
 
   family:
     min_confidence: 0.5

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The evening catch-up passes, 01.11.2026: 17:00 and 22:30, analyse the
+  backlog until the usage window runs out, then send the digest. See
+  run-evening.sh. One date only (DESK_RUN_ON); to make it daily, drop the
+  Month/Day keys and DESK_RUN_ON.
+
+  This file is not installed by anything. Copying it into ~/Library/LaunchAgents
+  is a deliberate act by a human, and so is removing it.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.noamarazi.jobdesk.evening</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/noamarazi/job-desk/deploy/launchd/run-evening.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/noamarazi/job-desk</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DESK_HOME</key>
+        <string>/Users/noamarazi/job-desk</string>
+        <key>DESK_RUN_ON</key>
+        <string>2026-11-01</string>
+        <!-- Five hours: a usage window, plus the digest. Power Nap hangs untimed jobs. -->
+        <key>DESK_TIMEOUT_SECONDS</key>
+        <string>18000</string>
+        <key>DESK_ENGINE</key>
+        <string>claude-code</string>
+        <!-- Accounting on the subscription, not a bill; high so the usage
+             window, not this number, is what stops the run. -->
+        <key>DESK_ANALYZE_BUDGET_USD</key>
+        <string>50.00</string>
+        <!-- Model calls. A backstop; three failures in a row stop it first. -->
+        <key>DESK_ANALYZE_LIMIT</key>
+        <string>5000</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Month</key><integer>11</integer>
+            <key>Day</key><integer>1</integer>
+            <key>Hour</key><integer>17</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Month</key><integer>11</integer>
+            <key>Day</key><integer>1</integer>
+            <key>Hour</key><integer>22</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+    </array>
+
+    <key>ExitTimeOut</key>
+    <integer>18000</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/noamarazi/job-desk/runs/evening.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/noamarazi/job-desk/runs/evening.err.log</string>
+</dict>
+</plist>

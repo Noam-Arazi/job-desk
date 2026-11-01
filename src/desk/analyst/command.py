@@ -38,6 +38,9 @@ from .types import (
 STAGES = (STOPPED_GATES, STOPPED_FAMILY, STOPPED_EXTRACT, STOPPED_REFLECT)
 
 
+CONSECUTIVE_FAILURES = 3
+
+
 def _rows(
     store: Store, args: argparse.Namespace, spec: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
@@ -155,6 +158,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     max_calls = getattr(args, "max_calls", None)
     analyst.max_calls = max_calls
     capped = 0
+    failing = 0
     for row in rows:
         # The ceiling counts model calls, not postings. Until 01.11.2026 the
         # limit counted postings, and a gate rejection — no call, no cost —
@@ -167,11 +171,20 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             capped += 1
             continue
         except BudgetExceeded as exc:
-            halted = str(exc)
+            halted = f"budget: {exc}"
             break
         except Exception as exc:  # noqa: BLE001 — one bad posting is not a failed run
             errors.append(f"{(row.get('fingerprint') or '')[:8]}  {type(exc).__name__}: {exc}")
+            failing += 1
+            # One bad posting is not a failed run; three in a row is the engine.
+            # When the subscription's usage window runs out every call fails
+            # the same way, and going on would walk the whole backlog through
+            # the error path. The evening passes run to exactly that point.
+            if failing >= CONSECUTIVE_FAILURES:
+                halted = f"{failing} postings failed in a row, last: {exc}"
+                break
             continue
+        failing = 0
         analyses.append(analysis)
         if args.write:
             _store_analysis(store, analysis, now=stamp)
@@ -185,7 +198,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     total = ctx.tracer.total
     print(f"tokens   in={total.input_tokens} out={total.output_tokens} cost=${total.cost_usd:.6f}")
     if halted:
-        print(f"halted   budget: {halted}")
+        print(f"halted   {halted}")
     if capped:
         print(
             f"capped   {max_calls} model calls reached, "
