@@ -88,20 +88,29 @@ def knockout_cap(spec: Mapping[str, Any]) -> float:
 
 
 def ledger(spec: Mapping[str, Any]) -> str:
-    """What the candidate has, by role type and in years — not the inventory.
+    """Which role types the candidate has held, what he has done, and what he
+    lacks — not the inventory, and no longer the years.
 
     28.10.2026. The scorer used to see only what the CV family stands for, so
     "Product Manager" scored 0.85 because a product CV exists, against zero
     years as a product manager. The ledger is a short local file (data/ is
     gitignored) and a machine without one judges the family alone, as before.
+
+    01.11.2026. The years came out. The seniority gate already compares them
+    against the spec's ceiling, and the scorer, handed "total 1.5" next to a
+    posting asking for two, punished the same fact again: a consulting role
+    squarely in Noam's direction scored 0.38. Held or never held is what the
+    scorer needs; how long is the gate's question.
     """
     rel = ((spec.get("analyst") or {}).get("score") or {}).get("ledger", "data/candidate.yaml")
     path = paths().root / rel
     if not path.exists():
         return "(no ledger on this machine: judge the family alone, and leave knockout empty)"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    lines = [f"- total professional years: {data.get('total_years', '?')}"]
-    lines += [f"- {role}: {years} years" for role, years in (data.get("roles") or {}).items()]
+    roles = (data.get("roles") or {}).items()
+    lines = [f"- has held: {role}" for role, years in roles if float(years or 0) > 0]
+    lines += [f"- has never held: {role}" for role, years in roles if not float(years or 0) > 0]
+    lines += [f"- has done: {work}" for work in data.get("work_done") or ()]
     lines += [f"- does not have: {skill}" for skill in data.get("skills_absent") or ()]
     return "\n".join(lines)
 
@@ -150,7 +159,7 @@ def build_request(
     spec: Mapping[str, Any],
 ) -> LLMRequest:
     """Built in one place so the recorder and the run always agree on the key."""
-    prompt = load_prompt("analyst", "fit_score", 2)
+    prompt = load_prompt("analyst", "fit_score", 3)
     listing = (
         "\n".join(
             f"- [{r.kind}] {'must' if r.mandatory else 'nice to have'}: {r.text}"

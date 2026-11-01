@@ -1111,3 +1111,22 @@ def test_past_the_call_ceiling_a_posting_that_needs_the_model_waits() -> None:
     with pytest.raises(CallCeiling):
         analyst.ask(LLMRequest.__new__(LLMRequest))
     assert analyst.total_calls == 0
+
+
+def test_the_ledger_tells_the_scorer_held_or_not_and_never_the_years(tmp_path, monkeypatch) -> None:
+    """01.11.2026: the gate already judged the years, and "total 1.5" in the
+    ledger let the scorer punish a two-year posting a second time (0.38)."""
+    from desk.config import Paths
+
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "candidate.yaml").write_text(
+        "total_years: 1.5\nroles:\n  data analyst: 1\n  product manager: 0\n"
+        "work_done:\n  - specification documents\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(score, "paths", lambda *a, **k: Paths(tmp_path))
+    text = score.ledger({})
+    assert "has held: data analyst" in text
+    assert "has never held: product manager" in text
+    assert "has done: specification documents" in text
+    assert "1.5" not in text and "years" not in text
