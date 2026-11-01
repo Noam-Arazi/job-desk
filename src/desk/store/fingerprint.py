@@ -43,3 +43,35 @@ def fingerprint(title: str, company: str, location: str = "") -> str:
     parts = [normalize(title), normalize(company), normalize(location)]
     digest = hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
     return digest[:16]
+
+
+# Words that change between two listings of the same employer and say nothing
+# about which employer it is: "BDO" in the tracker, "BDO Israel" on LinkedIn.
+_COMPANY_NOISE = frozenset("israel ישראל ltd inc בע מ בעמ technologies technology group".split())
+# An employer an agency hides is not one employer. Two `חברה חסויה` rows with the
+# same title are as likely two seats as one, so they never match on name.
+_ANONYMOUS = ("חסוי", "confidential", "חברה גדולה", "ארגון ")
+# Hebrew gender endings — `מפתח/ת`, `אנליסט.ית` — are not separators.
+_GENDER = re.compile(r"\s?[/.]\s?(?:ת|ית|ה|ות|יות)(?=[\s,|(/-]|$)")
+# Where a title stops naming the role and starts describing it.
+_TITLE_TAIL = re.compile(r"\s[-–—|/]\s|[(/|,–—]")
+
+
+def role_key(title: str, company: str) -> tuple[str, str] | None:
+    """A looser identity than `fingerprint`, for the applied-blocklist only.
+
+    The fingerprint includes location and the raw company name, so the role
+    Noam typed into his tracker as `AI Specialist / BDO / (no location)` and the
+    one LinkedIn prints as `AI Specialist / BDO Israel / Tel Aviv District` are
+    two jobs to it, and the second came back in the digest after he had applied.
+    This keys on the employer without its suffixes and on the title up to its
+    first separator. None when the employer is anonymous or either part is empty.
+    """
+    raw = company.casefold()
+    if any(mark in raw for mark in _ANONYMOUS):
+        return None
+    employer = " ".join(w for w in normalize(company).split() if w not in _COMPANY_NOISE)
+    head = normalize(_TITLE_TAIL.split(_GENDER.sub("", title), maxsplit=1)[0])
+    if not employer or not head:
+        return None
+    return employer, head

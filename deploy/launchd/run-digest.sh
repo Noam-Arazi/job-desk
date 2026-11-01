@@ -84,6 +84,13 @@ set -m
     # 28.10.2026 — LinkedIn descriptions are read through Noam's own Chrome
     # profile. If the window was closed it is reopened here; its sign-ins live
     # in the profile and survive. Failing to open it costs details, not the run.
+    # 01.11.2026 — the hand-kept tracker is read every morning, before anything
+    # is judged. It used to be imported only when someone remembered, and the
+    # digest offered back BDO, Linnovate and Nogamy after they had been sent.
+    # A tracker that cannot be read costs the blocklist a day, not the run.
+    "$UV" run --directory "$DESK_HOME" desk import-applications --write \
+        || echo "tracker import failed; yesterday's blocklist stands" >&2
+
     "$DESK_HOME/deploy/browser/start-chrome.sh" || echo "job-desk chrome did not start" >&2
     sleep 5
     for site in $runnable; do

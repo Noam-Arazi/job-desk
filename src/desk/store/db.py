@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .fingerprint import fingerprint as make_fingerprint
+from .fingerprint import role_key
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -381,7 +382,28 @@ class Store:
             f"SELECT 1 FROM applications WHERE fingerprint IN ({placeholders})",
             tuple(group),
         ).fetchone()
-        return row is not None
+        return row is not None or self._applied_by_role(fingerprint)
+
+    def _applied_by_role(self, fingerprint: str) -> bool:
+        """The same employer and the same title, wherever and however it was listed.
+
+        The resolver scored the tracker's BDO row against LinkedIn's at 0.62 and
+        called them distinct, because the tracker row has no body worth reading.
+        A role applied to is finished, so for the blocklist the name is enough.
+        """
+        posting = self.conn.execute(
+            "SELECT title, company FROM postings WHERE fingerprint = ? LIMIT 1", (fingerprint,)
+        ).fetchone()
+        if posting is None:
+            return False
+        key = role_key(posting["title"] or "", posting["company"] or "")
+        if key is None:
+            return False
+        applied = self.conn.execute(
+            "SELECT DISTINCT p.title, p.company FROM applications a"
+            " JOIN postings p ON p.fingerprint = a.fingerprint"
+        ).fetchall()
+        return any(role_key(r["title"] or "", r["company"] or "") == key for r in applied)
 
     # -- decisions --------------------------------------------------------
 

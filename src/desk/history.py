@@ -60,13 +60,15 @@ DESCRIPTIONS = "תיאורי-משרה"
 
 # The tracker's vocabulary on the left, the manager's on the right. `screening`
 # maps to `ack` because they are the same fact under two names: the employer
-# answered and nothing has been decided.
+# answered and nothing has been decided. `rejected` is `closed` for the same
+# reason — the manager does not record who ended it, only that it ended.
 STATE_OF: dict[str, str] = {
     "applied": APPLIED,
     "screening": ACK,
     "interview": INTERVIEW,
     "offer": OFFER,
     "closed": CLOSED,
+    "rejected": CLOSED,
 }
 
 COLUMNS = ("date", "company", "role", "location", "source", "via", "status", "note")
@@ -190,15 +192,40 @@ def read(path: Path | str) -> list[Entry]:
     return entries
 
 
+def unknown(entries: Iterable[Entry]) -> list[str]:
+    """Why each row with a status the manager has no state for was left out.
+
+    One such row used to refuse the whole file, and a single `rejected` typed
+    into the tracker on 29.10 kept every application after it out of the
+    blocklist — so the digest offered jobs back that had already been sent.
+    The row is still refused, not guessed at; it just no longer takes the
+    others down with it.
+    """
+    reasons = []
+    for entry in entries:
+        try:
+            _ = entry.state
+        except UnknownStatus as exc:
+            reasons.append(str(exc))
+    return reasons
+
+
 def plan(
     entries: Iterable[Entry], store: Store, saved: Mapping[str, str] | None = None
 ) -> list[Row]:
-    """What the import would do, resolved against the store and written nowhere."""
+    """What the import would do, resolved against the store and written nowhere.
+
+    A row `unknown` names is left out; the caller reports it.
+    """
     from .manager.states import current as current_state
 
     saved = saved or {}
     rows = []
     for entry in entries:
+        try:
+            _ = entry.state
+        except UnknownStatus:
+            continue
         fp = entry.fingerprint
         body, filename = body_for(entry, saved)
         rows.append(

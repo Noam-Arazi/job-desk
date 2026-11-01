@@ -588,14 +588,11 @@ def cmd_import_applications(args: argparse.Namespace) -> int:
     saved = history.descriptions(folder)
 
     store = Store(paths().ensure().db)
-    try:
-        rows = history.plan(entries, store, saved)
-    except history.UnknownStatus as exc:
-        print(f"REFUSED  {exc}")
-        store.close()
-        return 1
+    rows = history.plan(entries, store, saved)
 
     print(f"tracker  {len(entries)} rows   {'WRITE' if args.write else 'dry run'}")
+    for reason in history.unknown(entries):
+        print(f"  SKIPPED  {reason}")
     by_state: dict[str, int] = {}
     for row in rows:
         by_state[row.state] = by_state.get(row.state, 0) + 1
@@ -698,7 +695,9 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = sub.add_parser("analyze", help="run the analyst over stored postings")
     analyze.add_argument("--limit", type=int, default=20, help="postings to consider")
     analyze.add_argument(
-        "--max-calls", type=int, default=None,
+        "--max-calls",
+        type=int,
+        default=None,
         help="stop after this many model calls; every unanalysed posting is considered",
     )
     analyze.add_argument("--fingerprint", action="append", help="analyse these and nothing else")

@@ -417,7 +417,8 @@ def test_an_already_applied_posting_never_reappears(spec, store) -> None:
     blocklist is what suppresses here: it is asked before the state is.
     """
     analysed(store, "fp1", score=0.9)
-    analysed(store, "fp2", score=0.8)
+    # Another employer: the blocklist also matches the same role at the same one.
+    analysed(store, "fp2", score=0.8, company="Northfold")
     assert [i.fingerprint for i in build(store, spec).items] == ["fp1", "fp2"]
 
     states.move(store, "fp1", states.APPLIED, spec=spec, now=NOW)

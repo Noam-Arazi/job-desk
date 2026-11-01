@@ -294,3 +294,59 @@ def test_priority_sites_are_read_before_newer_postings_elsewhere() -> None:
         "jobify", "alljobs"]
     assert len(store.unanalysed_postings(None)) == 2
     store.close()
+
+
+# --- the blocklist by role, not only by fingerprint -------------------------
+
+
+def _seen(store, site, title, company, location=""):
+    p = Posting(
+        site=site,
+        external_id=f"{site}-{title}-{company}",
+        title=title,
+        company=company,
+        location=location,
+        posted_at="2026-10-30",
+    )
+    store.upsert_posting(p, now="2026-10-30T06:00:00")
+    return p.fingerprint
+
+
+def test_applied_through_the_tracker_blocks_the_scraped_copy(tmp_path):
+    store = Store(tmp_path / "d.sqlite")
+    typed = _seen(store, "manual", "AI Specialist", "BDO")
+    scraped = _seen(store, "linkedin", "AI Specialist", "BDO Israel", "Tel Aviv District, Israel")
+    assert typed != scraped
+    store.mark_applied(typed, now="2026-08-16")
+
+    assert store.has_applied(scraped)
+    store.close()
+
+
+def test_another_role_at_the_same_employer_is_not_blocked(tmp_path):
+    store = Store(tmp_path / "d.sqlite")
+    brm = _seen(store, "manual", "Strategic Project Manager - BRM (משרה 5994)", "Nogamy")
+    store.mark_applied(brm, now="2026-11-01")
+
+    title = "Strategic Project Manager / Strategy & Planning Analyst"
+    same = _seen(store, "linkedin", title, "Nogamy")
+    assert store.has_applied(same)
+    assert not store.has_applied(_seen(store, "linkedin", "Project Manager", "Nogamy"))
+    assert not store.has_applied(_seen(store, "linkedin", "AI Product Manager", "Nogamy"))
+    store.close()
+
+
+def test_an_anonymous_employer_never_matches_on_name(tmp_path):
+    store = Store(tmp_path / "d.sqlite")
+    haifa = _seen(store, "alljobs", "Data Analyst", "חברה חסויה", "חיפה")
+    store.mark_applied(haifa, now="2026-10-01")
+
+    assert not store.has_applied(_seen(store, "alljobs", "Data Analyst", "חברה חסויה", "תל אביב"))
+    store.close()
+
+
+def test_hebrew_gender_endings_are_not_title_separators():
+    from desk.store.fingerprint import role_key
+
+    title = "מפתח/ת AI ג׳וניור/ית — אגף מערכות מידע"
+    assert role_key(title, "איכילוב") == ("איכילוב", "מפתח ai ג׳וניור")

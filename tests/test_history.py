@@ -337,3 +337,24 @@ def test_only_the_state_that_waits_on_silence_carries_a_clock(store, tracker):
     load(store, tracker)
     closed = next(e for e in history.read(tracker) if e.company == "Classiq")
     assert not store.state(closed.fingerprint)["due_at"], "a closed row is still nudging"
+
+
+# --- one bad row does not refuse the file ----------------------------------
+
+
+def test_rejected_is_closed(tmp_path):
+    path = write_csv(
+        tmp_path / "t.csv", [("2026-10-29", "SoulMynd", "FDE", "", "", "", "rejected", "")]
+    )
+    assert history.read(path)[0].state == "closed"
+
+
+def test_an_unknown_status_skips_its_row_and_keeps_the_rest(store, tmp_path):
+    rows = ROWS + [("2026-10-30", "Acme", "Analyst", "", "", "", "ghosted", "")]
+    entries = history.read(write_csv(tmp_path / "t.csv", rows))
+
+    planned = history.plan(entries, store)
+
+    assert [r.entry.company for r in planned] == ["Classiq", "BDO", "הטכניון"]
+    assert len(history.unknown(entries)) == 1
+    assert "ghosted" in history.unknown(entries)[0]
