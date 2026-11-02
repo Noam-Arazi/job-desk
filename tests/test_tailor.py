@@ -1439,3 +1439,63 @@ def test_a_batch_that_mixes_both_kinds_is_treated_as_the_integrity_kind(
     rules = {v.rule for v in caught.value.violations}
     assert "add_new_bullet" in rules and "edit_summary" in rules
     assert ctx.gateway.client.stages == ["tailor_cv"], "no second ask"
+
+
+# --- addressing slips repaired before the contract reads them -------------
+
+
+def test_a_reorder_named_by_its_heading_is_a_reorder_of_that_group(base):
+    """02.11.2026: three of five cuts reordered `TECHNICAL SKILLS` instead of `skills`."""
+    slipped = change(
+        op=cs.REORDER_SKILL_CATEGORIES,
+        section="TECHNICAL SKILLS",
+        before="skills.0, skills.1, skills.2",
+        after="skills.2, skills.0, skills.1",
+    )
+    assert "touch_identity_block" in violations_of(base, slipped)
+    repaired = tl.repair_addresses(cs.ChangeSet(changes=(slipped,)), base)
+    assert repaired.changes[0].section == "skills"
+    assert violations_of(base, *repaired.changes) == set()
+
+
+def test_a_reorder_reaching_across_groups_is_left_for_the_contract(base):
+    across = change(
+        op=cs.REORDER_LINES_WITHIN_SECTION,
+        section="EXPERIENCE",
+        before="exp.0.bullet.0, exp.1.bullet.0",
+        after="exp.1.bullet.0, exp.0.bullet.0",
+    )
+    repaired = tl.repair_addresses(cs.ChangeSet(changes=(across,)), base)
+    assert repaired.changes[0].section == "EXPERIENCE"
+    assert "touch_identity_block" in violations_of(base, *repaired.changes) or (
+        "add_new_bullet" in violations_of(base, *repaired.changes)
+    )
+
+
+def test_a_misquoted_before_is_replaced_by_the_base_line(base):
+    """The Fischer and scope rules diff against `before`; it must be the base's own."""
+    misquoted = change(before="Built dashboards", after=BULLET_DASHBOARDS)
+    assert "claim_without_evidence" in violations_of(base, misquoted)
+    repaired = tl.repair_addresses(cs.ChangeSet(changes=(misquoted,)), base)
+    assert repaired.changes[0].before == BULLET_DASHBOARDS
+    assert "claim_without_evidence" not in violations_of(base, *repaired.changes)
+
+
+def test_an_english_advert_inside_a_hebrew_jobify_frame_is_english():
+    from desk.tailor.command import posting_is_english
+
+    body = "We are looking for an Analyst to join our team. " * 10 + "\nדרישות התפקיד\n"
+    assert posting_is_english({"title": "Analyst", "body": body})
+    hebrew = {"title": "אנליסט/ית פיננסי/ת", "body": "ניתוחים שוטפים באקסל, SQL"}
+    assert not posting_is_english(hebrew)
+
+
+def test_an_english_cv_is_named_in_english(tmp_path):
+    contract = copy.deepcopy(CONTRACT)
+    contract["review"]["output"]["dir"] = str(tmp_path) + "/<posting folder>/"
+    english = render.output_path(contract, company="ZIM", title="Analyst", root=tmp_path,
+                                 language="en")
+    hebrew = render.output_path(contract, company="ZIM", title="Analyst", root=tmp_path,
+                                language="he")
+    assert english.name == "Noam_Arazi_CV.docx"
+    assert hebrew.name == "נעם_ארזי_קורות_חיים.docx"

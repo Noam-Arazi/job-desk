@@ -357,7 +357,9 @@ def write_tailored_cv(
             f"({base_sha256[:12]} -> {base.sha256[:12]}); re-run the tailoring"
         )
 
-    target = render.output_path(contract, company=company, title=title, fingerprint=fingerprint)
+    target = render.output_path(
+        contract, company=company, title=title, fingerprint=fingerprint, language=base.language
+    )
     written = render.write(base, ChangeSet.from_json(changeset), target, force=bool(force))
     return {
         "path": str(written.path),

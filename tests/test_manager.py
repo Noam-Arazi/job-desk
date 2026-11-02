@@ -2113,3 +2113,17 @@ def test_a_family_switched_off_is_never_offered(store, spec):
 
     assert [item.fingerprint for item in today.items] == []
     assert today.suppressed["family_off"] == 1
+
+
+def test_the_cv_caption_carries_the_link_and_why_it_is_the_base() -> None:
+    """02.11.2026: a CV to send from the phone is useless without where to send it."""
+    from desk.manager import inbox
+
+    class Postings:
+        def get_posting(self, fingerprint):
+            return {"title": "Analyst", "company": "ZIM", "url": "https://example.test/job/1"}
+
+    caption = inbox._caption(Postings(), "fp", ["קו״ח בסיס ללא התאמה. " + "x" * 3000])
+    assert caption.startswith("Analyst\nZIM\nhttps://example.test/job/1\n\n")
+    assert len(caption) <= 1024
+    assert inbox._caption(Postings(), "fp") == "Analyst\nZIM\nhttps://example.test/job/1"

@@ -251,4 +251,5 @@ review:
   output:
     dir: "~/קורות חיים/<posting folder>/"
     filename: "נעם_ארזי_קורות_חיים.docx"   # the role name never enters the filename
+    filename_en: "Noam_Arazi_CV.docx"      # an English base; same rule, his English folders' name
     format: docx              # Word only, never PDF — Noam edits after

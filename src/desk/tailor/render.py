@@ -99,8 +99,13 @@ def output_path(
     title: str = "",
     fingerprint: str = "",
     root: Path | str | None = None,
+    language: str = "",
 ) -> Path:
     """Where the document goes, per `review.output` in the contract.
+
+    An English CV takes `filename_en` when the contract has one: Noam's English
+    folders hold `Noam_Arazi_CV.docx`, and a recruiter abroad who downloads an
+    attachment named in Hebrew sees a row of question marks.
 
     The result is asserted to sit under the configured root before it is
     returned, so a folder name that escaped `folder_name` would still fail
@@ -109,6 +114,8 @@ def output_path(
     output = contract.get("review", {}).get("output", {})
     template = str(output.get("dir", "~/קורות חיים/"))
     filename = str(output.get("filename", "cv.docx"))
+    if language == "en" and output.get("filename_en"):
+        filename = str(output["filename_en"])
     folder = folder_name(company=company, title=title, fingerprint=fingerprint)
 
     base_dir = output_root(contract, root=root)

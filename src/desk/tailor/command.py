@@ -158,6 +158,7 @@ def _tailor_one(
             ctx=ctx,
             contract=contract,
             language=args.language,
+            posting_is_english=posting_is_english(posting),
         )
     except NoFamily as exc:
         print(f"skipped   {exc}")
@@ -173,14 +174,19 @@ def _tailor_one(
         # contract file uses, so a message on a phone can be looked up in
         # `spec/change-contract.yaml` without a laptop, and they are short
         # enough that five of them still read as one line.
-        return refuse(
-            "חוזה קורות החיים חסם את העריכה ולא נכתב מסמך\n"
-            + ", ".join(sorted({v.rule for v in exc.violations}))
-        )
+        why = ", ".join(sorted({v.rule for v in exc.violations}))
+        if getattr(args, "fallback", False):
+            return _write_base(store, ctx, analysis, posting, args, report,
+                               f"חוזה קורות החיים חסם את ההתאמה ({why})")
+        return refuse("חוזה קורות החיים חסם את העריכה ולא נכתב מסמך\n" + why)
     except Fabrication as exc:
         print("REJECTED  the fabrication check refused the changeset")
         for claim in exc.unsupported:
             print(f"  unsupported  {claim}")
+        if getattr(args, "fallback", False):
+            return _write_base(store, ctx, analysis, posting, args, report,
+                               "בדיקת ההמצאה סירבה לשורה שאין לה מקור:\n"
+                               + "\n".join(exc.unsupported))
         return refuse(
             "בדיקת ההמצאה סירבה — שורה שאין לה מקור בבסיס או במלאי\n"
             + ", ".join(exc.unsupported)
@@ -209,6 +215,61 @@ def _tailor_one(
         print("nothing written. re-run with --write to cut the document")
         return 0
 
+    return _write(store, ctx, analysis, posting, base, result.changeset, args)
+
+
+def posting_is_english(posting: dict) -> bool:
+    """Whether the advert is written in English, which is what picks the English base.
+
+    `bases.select` has taken this flag since August and nothing passed it, so
+    every cut was Hebrew: on 02.11.2026 ZIM's English advert came back as a
+    Hebrew CV. Jobify wraps every advert in a Hebrew header ("דרישות התפקיד"),
+    so the test is a share of the letters, not the presence of any Hebrew.
+    """
+    text = f"{posting.get('title') or ''} {posting.get('body') or ''}"
+    hebrew = sum(1 for ch in text if "\u0590" <= ch <= "\u05ff")
+    latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+    return latin > 0 and hebrew < 0.1 * (hebrew + latin)
+
+
+def _write_base(store: Store, ctx: object, analysis, posting: dict, args, report, why: str) -> int:
+    """The base, unchanged, when the tailoring was refused. Only for a press.
+
+    02.11.2026 — Noam approved five postings from his phone and got no CV for
+    four of them: the contract or the verifier refused the edits, and a refusal
+    meant no file. A refused edit is the edit's problem, not the application's.
+    The approved base is the CV he sends when nothing is tailored at all, so a
+    press now always ends in a document, and the refusal travels with it as the
+    reason it is the base. An empty changeset is the one changeset every rule
+    in the contract passes by construction.
+
+    `desk tailor` at a keyboard keeps the old answer — refused means nothing
+    written — because there a person is reading the violations.
+    """
+    from .bases import load_for
+    from .changeset import ChangeSet
+    from .contract import load_contract as _contract
+
+    inputs = _contract().get("inputs", {})
+    try:
+        base = load_for(
+            analysis.family.family,
+            directory=inputs.get("bases_dir", ""),
+            language=args.language,
+            posting_is_english=posting_is_english(posting),
+        )
+    except BaseNotFound as exc:
+        if report is not None:
+            report(f"לא נמצא בסיס קורות חיים מתאים\n{exc}")
+        return 1
+    print(f"FALLBACK  writing the base unchanged: {why.splitlines()[0]}")
+    code = _write(store, ctx, analysis, posting, base, ChangeSet(), args)
+    if report is not None:
+        report(f"קו״ח בסיס ללא התאמה. {why}" if code == 0 else why)
+    return code
+
+
+def _write(store: Store, ctx: object, analysis, posting: dict, base, changeset, args) -> int:
     # The document is cut through the registry, not by calling the renderer here.
     # It is the one write-local act in the daily run, and routing it through the
     # single dispatch point is what puts it under the same policy, tracing and
@@ -222,7 +283,7 @@ def _tailor_one(
             "family": base.family,
             "language": base.language,
             "base_sha256": base.sha256,
-            "changeset": result.changeset.as_json(),
+            "changeset": changeset.as_json(),
             "company": str(posting.get("company") or analysis.company),
             "title": str(posting.get("title") or analysis.title),
             "force": bool(getattr(args, "force", False)),
@@ -241,7 +302,7 @@ def _tailor_one(
         language=base.language,
         base_sha256=written["base_sha256"],
         path=written["path"],
-        changes=result.changeset.as_json(),
+        changes=changeset.as_json(),
         now=datetime.now().isoformat(timespec="seconds"),
     )
     print("")
@@ -300,6 +361,7 @@ def cut_one(
         write=True,
         force=force,
         language=language,
+        fallback=True,
     )
     try:
         _tailor_one(store, ctx, contract, fingerprint, args, report=report)

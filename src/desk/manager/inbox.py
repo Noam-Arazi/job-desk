@@ -241,7 +241,12 @@ def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, t
 
     from .delivery import Document
 
-    sink.send_documents([Document(path=path, caption=_caption(store, press.fingerprint))])
+    # The refusal, when there was one, rides on the document: on a press the
+    # tailoring stack falls back to the unchanged base, and the caption is the
+    # only place Noam learns that what he is about to send is not tailored.
+    sink.send_documents(
+        [Document(path=path, caption=_caption(store, press.fingerprint, refusals))]
+    )
     return f"approved {press.fingerprint[:12]}, document sent"
 
 
@@ -253,11 +258,23 @@ def _tell(sink, headline: str, lines: list[str]) -> None:
         print(f"failed   telling: {type(error).__name__}: {error}")
 
 
-def _caption(store, fingerprint: str) -> str:
+def _caption(store, fingerprint: str, notes: list[str] | None = None) -> str:
+    """Title, company, the link to apply through, and why it is the base if it is.
+
+    The link was added 02.11.2026. The press exists so Noam can apply from the
+    phone, and a CV with no link sent him back to the digest message to find
+    where it was meant to go. Telegram caps a caption at 1024 characters; the
+    notes are what gets cut, never the link.
+    """
     posting = store.get_posting(fingerprint) or {}
-    title = str(posting.get("title") or "")
-    company = str(posting.get("company") or "")
-    return "\n".join(line for line in (title, company) if line)
+    head = [str(posting.get(k) or "") for k in ("title", "company", "url")]
+    head = "\n".join(line for line in head if line)
+    tail = "\n".join(notes or [])
+    room = 1024 - len(head) - 2
+    if tail and room > 20:
+        tail = tail if len(tail) <= room else tail[: room - 1] + "…"
+        return f"{head}\n\n{tail}"
+    return head
 
 
 def _mark(sink, press: Press, render, action: str) -> None:

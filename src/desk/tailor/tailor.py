@@ -35,7 +35,7 @@ failure this file is built to make structurally impossible.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -275,6 +275,44 @@ def propose(
 MECHANICAL = frozenset({"add_new_bullet", "exceed_one_page"})
 
 
+def repair_addresses(changeset: ChangeSet, base: Base) -> ChangeSet:
+    """Correct the two addressing slips the model makes, before the contract reads it.
+
+    02.11.2026 — four of five approved postings came back with nothing written,
+    and none of the four for a claim. Three reordered the skills block under its
+    heading ("TECHNICAL SKILLS", "כישורים") instead of its group id `skills`,
+    which `touch_identity_block` reads as a reorder reaching across groups, and
+    one quoted a `before` that was not the base's line. Neither is a choice the
+    model made about Noam; both are copying errors with exactly one correct
+    reading.
+
+    A reorder whose addresses all belong to one group is a reorder of that
+    group, whatever it was called. And `before` is replaced by the base's own
+    line rather than trusted: that is the line the projection edits anyway, and
+    it is the line the Fischer and scope rules must diff `after` against — a
+    model-supplied `before` is precisely what `_before_is_the_base_line` exists
+    to distrust. Everything else still goes through `enforce_contract` unchanged.
+    """
+    groups = {line.group for line in base.lines if line.group}
+    fixed: list[Change] = []
+    for change in changeset.changes:
+        if change.is_reorder:
+            if change.section not in groups:
+                owners = {
+                    line.group
+                    for address in change.order_before() + change.order_after()
+                    if (line := base.line(address)) is not None
+                }
+                if len(owners) == 1:
+                    change = replace(change, section=owners.pop())
+        else:
+            line = base.line(change.section)
+            if line is not None and change.before != line.text:
+                change = replace(change, before=line.text)
+        fixed.append(change)
+    return replace(changeset, changes=tuple(fixed))
+
+
 def mechanical_only(violations: Sequence[Violation]) -> bool:
     """True when every violation is a slip rather than an unsupported claim."""
     return bool(violations) and all(v.rule in MECHANICAL for v in violations)
@@ -403,7 +441,9 @@ def tailor(
     )
     inventory = read_inventory(inventory_file)
 
-    changeset = propose(analysis, base, ctx=ctx, contract=rules, inventory=inventory)
+    changeset = repair_addresses(
+        propose(analysis, base, ctx=ctx, contract=rules, inventory=inventory), base
+    )
     # One repair, and only for a mechanical rejection. Before this, a changeset
     # that dropped a word while adding a term was thrown away whole: the run
     # printed the violation into a log and Noam, who had pressed the button and
@@ -419,13 +459,16 @@ def tailor(
     except ContractError as rejection:
         if not mechanical_only(rejection.violations):
             raise
-        changeset = repropose(
-            analysis,
+        changeset = repair_addresses(
+            repropose(
+                analysis,
+                base,
+                ctx=ctx,
+                contract=rules,
+                rejected=changeset,
+                violations=rejection.violations,
+            ),
             base,
-            ctx=ctx,
-            contract=rules,
-            rejected=changeset,
-            violations=rejection.violations,
         )
         projected = enforce_contract(base, changeset, contract=rules)
     verified, unsupported = verify(base, changeset, ctx=ctx, inventory=inventory)
