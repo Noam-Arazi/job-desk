@@ -186,7 +186,7 @@ set -m
     # delivery.py refuses. Into a disabled or unconfigured channel this is a
     # hard error, never a silent print, so a broken token fails on day one
     # instead of looking like a week of empty mornings.
-    "$UV" run --directory "$DESK_HOME" desk digest --format telegram --send || exit 1
+    "$UV" run --directory "$DESK_HOME" desk digest --format telegram --send --check-open || exit 1
 
     exit "$status"
 ) &

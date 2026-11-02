@@ -737,6 +737,9 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--limit", type=int, default=None, help="override the spec's max_items")
     digest.add_argument("--min-score", type=float, default=None, help="override the spec's floor")
     digest.add_argument("--send", action="store_true", help="deliver it; off by default")
+    digest.add_argument(
+        "--check-open", action="store_true", help="read each item's page and drop closed jobs"
+    )
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)
 

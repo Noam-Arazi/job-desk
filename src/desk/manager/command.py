@@ -67,14 +67,21 @@ def cmd_digest(args: argparse.Namespace) -> int:
     try:
         # Found, reported, delivered, and only then written. See the note above.
         closing = timers.pending(store, now=now, spec=spec)
-        today = digest_module.build(
-            store,
-            now=now,
-            spec=spec,
-            limit=args.limit,
-            min_score=args.min_score,
-            closed=closing,
-        )
+
+        def build() -> digest_module.Digest:
+            return digest_module.build(
+                store,
+                now=now,
+                spec=spec,
+                limit=args.limit,
+                min_score=args.min_score,
+                closed=closing,
+            )
+
+        if getattr(args, "check_open", False):
+            today = _drop_closed(store, build, spec=spec, now=now)
+        else:
+            today = build()
         # The buttons ride with the message rather than in one of their own,
         # so the choice is under the posting it is about. Only the phone gets
         # them; the terminal prints what they would have said.
@@ -91,6 +98,47 @@ def cmd_digest(args: argparse.Namespace) -> int:
     finally:
         store.close()
     return 0
+
+
+def _drop_closed(store: Store, build, *, spec: dict, now: datetime) -> digest_module.Digest:
+    """Read each item's page and close the ones the board says are closed.
+
+    alljobs answers plain HTTP; jobify sits behind a challenge and is read
+    through the job-desk Chrome, which is attached only if a jobify item needs it.
+    """
+    from ..sites.browser import attach
+    from ..sites.http import HttpFetcher
+    from . import liveness
+
+    browser: list = []
+
+    def jobify(url: str) -> str:
+        if not browser:
+            browser.append(attach(pace=2.0))
+        if browser[0] is None:
+            raise RuntimeError("the job-desk chrome is not open")
+        return browser[0].get(url)
+
+    def close(item) -> None:
+        states.move(
+            store,
+            item.fingerprint,
+            states.CLOSED,
+            spec=spec,
+            now=now,
+            note="the board's page says it is closed",
+            source=states.SYSTEM,
+        )
+
+    check = liveness.page_checker({"alljobs": HttpFetcher().get, "jobify": jobify})
+    try:
+        today, gone = liveness.drop_closed(build, check=check, close=close)
+    finally:
+        if browser and browser[0] is not None:
+            browser[0].close()
+    for item in gone:
+        print(f"closed   {item.site:<8} {item.title[:56]}", file=sys.stderr)
+    return today
 
 
 def cmd_inbox(args: argparse.Namespace) -> int:
