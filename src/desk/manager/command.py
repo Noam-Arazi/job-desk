@@ -103,8 +103,8 @@ def cmd_digest(args: argparse.Namespace) -> int:
 def _drop_closed(store: Store, build, *, spec: dict, now: datetime) -> digest_module.Digest:
     """Read each item's page and close the ones the board says are closed.
 
-    alljobs answers plain HTTP; jobify sits behind a challenge and is read
-    through the job-desk Chrome, which is attached only if a jobify item needs it.
+    alljobs answers plain HTTP; jobify and LinkedIn are read through the
+    job-desk Chrome, which is attached only if an item needs it.
     """
     from ..sites.browser import attach
     from ..sites.http import HttpFetcher
@@ -112,7 +112,7 @@ def _drop_closed(store: Store, build, *, spec: dict, now: datetime) -> digest_mo
 
     browser: list = []
 
-    def jobify(url: str) -> str:
+    def chrome(url: str) -> str:
         if not browser:
             browser.append(attach(pace=2.0))
         if browser[0] is None:
@@ -130,7 +130,9 @@ def _drop_closed(store: Store, build, *, spec: dict, now: datetime) -> digest_mo
             source=states.SYSTEM,
         )
 
-    check = liveness.page_checker({"alljobs": HttpFetcher().get, "jobify": jobify})
+    check = liveness.page_checker(
+        {"alljobs": HttpFetcher().get, "jobify": chrome, "linkedin": chrome}
+    )
     try:
         today, gone = liveness.drop_closed(build, check=check, close=close)
     finally:

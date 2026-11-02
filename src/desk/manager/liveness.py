@@ -11,6 +11,7 @@ marker, keeps its item: a board that is down costs the check, not the job.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
 
@@ -19,7 +20,24 @@ from typing import Any, Protocol, TypeVar
 MARKERS: dict[str, tuple[str, ...]] = {
     "alljobs": ('סומנה ע"י המעסיק כלא אקטואלית',),
     "jobify": ("המשרה הזאת סגורה כעת",),
+    # The Hebrew interface of the job-desk Chrome, read 02.11.2026 off a job
+    # jobify still showed as open.
+    "linkedin": ("כבר לא מקבלים מועמדים", "No longer accepting applications"),
 }
+
+# A jobify id ending in `-in` is a LinkedIn job id: jobify mirrors it and keeps
+# showing it open after LinkedIn has closed it, so the source page is asked too.
+_JOBIFY_FROM_LINKEDIN = re.compile(r"jobify360\.co\.il/jobs/(\d+)-in\b")
+
+
+def source_pages(site: str, url: str) -> list[tuple[str, str]]:
+    """Every (site, url) whose page can say this job is closed."""
+    pages = [(site, url)]
+    mirrored = _JOBIFY_FROM_LINKEDIN.search(url) if site == "jobify" else None
+    if mirrored:
+        pages.append(("linkedin", f"https://www.linkedin.com/jobs/view/{mirrored.group(1)}/"))
+    return pages
+
 
 # Each refill can bring up another closed job. A few rounds clear a bad morning;
 # walking the whole ranking one page at a time is not worth the requests.
@@ -83,12 +101,17 @@ def page_checker(fetchers: dict[str, Callable[[str], str]]) -> Callable[[Any], b
     """A `check` that reads each item's page with its site's fetcher."""
 
     def check(item: Any) -> bool | None:
-        fetch = fetchers.get(item.site)
-        if fetch is None or not item.url or item.site not in MARKERS:
-            return None
-        try:
-            return is_closed(item.site, fetch(item.url))
-        except Exception:
-            return None
+        verdicts = []
+        for site, url in source_pages(item.site, item.url):
+            fetch = fetchers.get(site)
+            if fetch is None or not url or site not in MARKERS:
+                continue
+            try:
+                verdicts.append(is_closed(site, fetch(url)))
+            except Exception:
+                continue
+        if any(v is True for v in verdicts):
+            return True
+        return False if verdicts else None
 
     return check

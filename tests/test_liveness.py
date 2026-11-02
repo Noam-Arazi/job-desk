@@ -84,3 +84,27 @@ def test_the_rounds_are_bounded() -> None:
     liveness.drop_closed(build, check=lambda _: True, close=lambda _: None, rounds=3)
 
     assert len(calls) == 4
+
+
+def test_linkedin_says_it_no_longer_takes_candidates() -> None:
+    page = "<span>מעל 100 מועמדים</span><div>כבר לא מקבלים מועמדים</div>"
+    assert liveness.is_closed("linkedin", page) is True
+
+
+def test_a_jobify_mirror_of_linkedin_is_closed_when_linkedin_is() -> None:
+    """02.11.2026: Computer Guard's analyst role was open on jobify and closed
+    on LinkedIn, whose job id jobify carries in its own url."""
+    item = _Item("a", "jobify", "https://jobify360.co.il/jobs/4480038880-in")
+    pages = {
+        "https://jobify360.co.il/jobs/4480038880-in": "<button>הגשת קורות חיים</button>",
+        "https://www.linkedin.com/jobs/view/4480038880/": "כבר לא מקבלים מועמדים",
+    }
+    check = liveness.page_checker({"jobify": pages.__getitem__, "linkedin": pages.__getitem__})
+
+    assert check(item) is True
+
+
+def test_a_jobify_job_of_its_own_asks_only_jobify() -> None:
+    assert liveness.source_pages("jobify", "https://jobify360.co.il/jobs/2761880-jk") == [
+        ("jobify", "https://jobify360.co.il/jobs/2761880-jk")
+    ]
