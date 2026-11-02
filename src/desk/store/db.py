@@ -19,7 +19,7 @@ runs rather than context budgeted inside one:
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -322,6 +322,19 @@ class Store:
         rows = self.conn.execute("SELECT * FROM postings ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
+    def recent_postings(self, *, since: str) -> list[dict[str, Any]]:
+        """The rows dated on or after `since`, by the board's date before the crawl's.
+
+        The resolver over the whole store passed ten minutes on 02.11.2026, and
+        a digest that shows one week needs only the weeks around it resolved.
+        """
+        rows = self.conn.execute(
+            "SELECT * FROM postings WHERE COALESCE(NULLIF(posted_at, ''), fetched_at) >= ?"
+            " ORDER BY id",
+            (since,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def unseen_postings(self, limit: int = 50) -> list[dict[str, Any]]:
         """Distinct roles that have not been applied to, newest first.
 
@@ -474,6 +487,21 @@ class Store:
                 "INSERT OR REPLACE INTO duplicate_links(left_fp, right_fp, score, band,"
                 " method, decided_at) VALUES (?,?,?,?,?,?)",
                 (a, b, score, band, method, now),
+            )
+
+    def record_links(
+        self, verdicts: Iterable[tuple[str, str, float, str, str]], *, now: str
+    ) -> None:
+        """`record_link` for a whole pass, in one transaction instead of one each."""
+        rows = [
+            (*sorted((left, right)), score, band, method, now)
+            for left, right, score, band, method in verdicts
+        ]
+        with self.tx() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO duplicate_links(left_fp, right_fp, score, band,"
+                " method, decided_at) VALUES (?,?,?,?,?,?)",
+                rows,
             )
 
     def links(self, band: str | None = None) -> list[dict[str, Any]]:

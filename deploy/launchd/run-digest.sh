@@ -102,6 +102,14 @@ set -m
         fi
     done
 
+    # 02.11.2026 — the resolver had not run since 26.08, so nothing fetched
+    # after that was ever linked to its copy on another board: HRSR's AI role
+    # sat at 8 and 9 in the digest, once from alljobs and once from jobify.
+    # Arithmetic only, no judge, and only the last two weeks — the digest shows
+    # one. A failed pass costs the merges of a day, not the delivery.
+    "$UV" run --directory "$DESK_HOME" desk resolve --since-days 14 --show 0 --write \
+        || echo "resolve failed; the digest may show a job twice" >&2
+
     # The analyst is the only step here that spends, so it carries a budget of
     # its own on top of the wall clock — and a clock of its own besides.
     #

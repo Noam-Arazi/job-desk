@@ -167,14 +167,20 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     A dry run by default, like fetch: it scores, bands and reports, and records
     nothing. `--write` stores the verdicts. `--judge` is what spends tokens, and
     it only ever reaches the pairs the arithmetic left uncertain.
+    `--since-days` limits the pass to the recent postings. That is what the
+    morning runs: the whole store took over ten minutes on 02.11.2026.
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     from .resolve import DUPLICATE, UNCERTAIN
     from .resolve import resolve as resolve_duplicates
 
     store = Store(paths().ensure().db)
-    rows = store.all_postings()
+    if args.since_days is None:
+        rows = store.all_postings()
+    else:
+        since = datetime.now() - timedelta(days=args.since_days)
+        rows = store.recent_postings(since=since.isoformat(timespec="seconds"))
     if not rows:
         print("store is empty; run `desk fetch --site <id> --write` first")
         store.close()
@@ -228,15 +234,9 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         return 0
 
     now = datetime.now().isoformat(timespec="seconds")
-    for pair in result.pairs:
-        store.record_link(
-            pair.left,
-            pair.right,
-            score=pair.score,
-            band=pair.band,
-            method=pair.method,
-            now=now,
-        )
+    store.record_links(
+        ((p.left, p.right, p.score, p.band, p.method) for p in result.pairs), now=now
+    )
     merged = len(store.links(DUPLICATE))
     store.close()
     print("")
@@ -680,6 +680,9 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_cmd.add_argument("--write", action="store_true", help="record the verdicts")
     resolve_cmd.add_argument("--judge", action="store_true", help="send uncertain pairs to a model")
     resolve_cmd.add_argument("--budget", type=float, default=None, help="usd ceiling for --judge")
+    resolve_cmd.add_argument(
+        "--since-days", type=int, default=None, help="only postings dated in the last N days"
+    )
     resolve_cmd.add_argument("--show", type=int, default=10, help="clusters to print")
     resolve_cmd.add_argument("--uncertain", action="store_true", help="list the uncertain pairs")
     resolve_cmd.set_defaults(func=cmd_resolve)

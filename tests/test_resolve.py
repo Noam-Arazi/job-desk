@@ -326,6 +326,61 @@ def test_a_pair_is_stored_once_whichever_order_it_arrives_in(ctx) -> None:
     assert rows[0]["method"] == "judged"
 
 
+def test_an_agency_that_signs_differently_on_each_site_is_still_one_job() -> None:
+    """02.11.2026: HRSR's "מוביל.ת AI וחדשנות דיגיטלית" sat at 8 and 9 in the
+    digest. Alljobs printed the agency with its whole tagline and jobify printed
+    "HRSR", so the employers disagree and only the carried text can merge them."""
+    left = posting(
+        "a",
+        "מוביל.ת AI וחדשנות דיגיטלית | פרוייקטי הנדסה ותפעול | חיפה",
+        BLURB,
+        "HRSR גיוס והשמה בעולמות - האנרגיה | תשתיות | מגה פרויקטים",
+        site="alljobs",
+    )
+    right = posting(
+        "b",
+        "מוביל.ת AI וחדשנות דיגיטלית | פרוייקטי הנדסה ותפעול | חיפה",
+        BLURB,
+        "HRSR",
+        site="jobify",
+    )
+    assert score_pair(left, right).band == DUPLICATE
+
+
+def test_the_daily_pass_reads_only_the_recent_postings(ctx) -> None:
+    """The whole store took over ten minutes on 02.11.2026 and the digest only
+    shows a week, so the morning resolves a window and leaves the archive be."""
+    from desk.store import Posting
+
+    old = Posting(site="alljobs", external_id="1", title="אנליסט נתונים", company="א")
+    new = Posting(site="jobify", external_id="2", title="אנליסט נתונים", company="ב")
+    ctx.store.upsert_posting(old, now="2026-08-01T09:00:00")
+    ctx.store.upsert_posting(new, now="2026-11-01T09:00:00")
+
+    recent = ctx.store.recent_postings(since="2026-10-19T00:00:00")
+
+    assert [r["fingerprint"] for r in recent] == [new.fingerprint]
+
+
+def test_a_posting_dates_itself_by_the_board_before_the_crawl(ctx) -> None:
+    from desk.store import Posting
+
+    stale = Posting(
+        site="alljobs", external_id="1", title="אנליסט", company="א", posted_at="2026-08-01"
+    )
+    ctx.store.upsert_posting(stale, now="2026-11-01T09:00:00")
+
+    assert ctx.store.recent_postings(since="2026-10-19T00:00:00") == []
+
+
+def test_verdicts_are_written_in_one_transaction(ctx) -> None:
+    rows = [("b", "a", 0.9, DUPLICATE, "deterministic"), ("c", "d", 0.1, DISTINCT, "deterministic")]
+    ctx.store.record_links(rows, now="t")
+
+    assert len(ctx.store.links()) == 2
+    assert ctx.store.merged_with("a") == ["a", "b"]
+
+
 def test_a_judge_whose_model_errors_says_different_rather_than_crashing() -> None:
     """The module promised this and the code did not keep it.
 
