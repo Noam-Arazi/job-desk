@@ -4,7 +4,7 @@ Every morning: a ranked shortlist of jobs, each with a tailored CV already writt
 
 **The system never applies.** That is not a setting — `submit_application` is registered in the tool registry and denied at the dispatch point, by a policy the registry owns rather than by one the caller installs. The difference is the guarantee: an adversarial review broke the earlier version three ways without any cleverness at all — a context with no hooks, a context with `hooks=None`, and a hook bus somebody assembled without a policy hook — and in all three the handler ran. A jailbreak does not have to argue a model into calling the tool if it can find the call path where the check was never installed. `tests/test_policy.py` walks all three shapes, and `tests/test_injection.py` runs the payload end to end.
 
-> Status: sessions 1-9 are built — scraping over five boards, four of them on, a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. The attached-browser sites and the README's own measurements table are not. The table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
+> Status: the full daily pipeline runs in production every morning — scraping across five job boards (four enabled), a content-based duplicate resolver, five deterministic gates, the analyst, the tailoring agent, the submission manager and the evals harness. Not built yet: the attached-browser sites, and the measurements table below. That table is waiting on a hand-labelled gold set, by design: `desk label` shows the posting and nothing the system concluded.
 
 ## Run it with nothing
 
@@ -119,3 +119,7 @@ The input is hostile by construction. A job posting is text written by a strange
 ### What the fetch layer does not do
 
 What is *not* done anywhere here is the part worth keeping straight, because "scraping politely" and "evading a bot defence" are different acts and only one of them happens in this repo. No login, no cookie, no session, no TLS impersonation, no anti-bot bypass, no CAPTCHA solving, and nothing behind an authentication wall — only the endpoints LinkedIn serves to a logged-out browser, at one request every two seconds. `stealth: false` is not a setting that could be flipped: the fetch layer has no bypass in it to switch on.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
