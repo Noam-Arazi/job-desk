@@ -287,7 +287,9 @@ work_arrangement:       # all accepted; recorded per item, never filtered on
 gates:
   seniority:
     mode: block
-    max_required_years: 3          # "3 years" passes, "4+" and "5 years" blocked
+    # 02.11.2026 — Noam: "3-5 years" is out too. Was 3, so "3+" and "3-5"
+    # passed; the digest's top 15 had 9 of them.
+    max_required_years: 2          # "2 years" passes, "3", "3-5" and "4+" blocked
     unstated: pass                 # no stated requirement => not a blocker
     range_rule: use_lower_bound    # "3-5 years" is read as 3 and passes;
                                    # switch to use_upper_bound to tighten

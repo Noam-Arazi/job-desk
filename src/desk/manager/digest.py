@@ -44,6 +44,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from ..analyst.types import Analysis
+from ..gates import seniority
 from . import states, timers
 from .states import APPLIED
 from .timers import Nudge
@@ -234,7 +235,7 @@ def build(
     for row in store.analyses(min_score=float(floor)):
         analysis = Analysis.from_json(str(row["payload"]))
         fingerprint = analysis.fingerprint or str(row["fingerprint"])
-        if analysis.blocked:
+        if analysis.blocked or _blocked_now(spec, store, fingerprint):
             suppressed["blocked"] += 1
             continue
         if analysis.family.family in off:
@@ -295,6 +296,25 @@ def build(
         remaining=max(0, len(ranked) - start - window),
         arrivals=store.first_seen_on(now.date().isoformat()),
     )
+
+
+def _blocked_now(spec: dict[str, Any], store: DigestStore, fingerprint: str) -> bool:
+    """The seniority gate asked again, under today's spec.
+
+    02.11.2026 — the ceiling moved from 3 years to 2, and every posting
+    analysed before that still carried the old pass in its stored verdict:
+    "3-5 years" kept reaching the top of the digest. The gate is a regex over
+    the posting, so asking it again costs nothing and needs no model; the
+    stored verdict is history, the spec is the rule."""
+    posting = store.get_posting(fingerprint)
+    if not posting:
+        return False
+    return seniority.check(
+        spec=spec,
+        title=str(posting.get("title") or ""),
+        body=str(posting.get("body") or ""),
+        stated_experience=str(posting.get("stated_experience") or ""),
+    ).blocks
 
 
 def _cluster(store: DigestStore, fingerprint: str) -> set[str]:

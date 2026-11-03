@@ -215,9 +215,18 @@ def test_no_experience_required_is_a_stated_zero_and_not_an_absence(spec) -> Non
 
 
 def test_a_range_is_read_at_its_lower_bound_as_the_spec_says(spec) -> None:
-    result = seniority_check(spec, body="דרוש ניסיון של 3-5 שנים בניתוח נתונים")
+    result = seniority_check(spec, body="דרוש ניסיון של 2-4 שנים בניתוח נתונים")
 
     assert result.verdict is Verdict.PASS
+    assert result.details["years"] == 2
+
+
+def test_three_to_five_years_is_over_the_ceiling(spec) -> None:
+    """02.11.2026 — Noam: "3-5 years" is out. The lower bound is 3, over the
+    ceiling of 2."""
+    result = seniority_check(spec, body="3-5 שנות ניסיון בתפקידי ניתוח נתונים")
+
+    assert result.verdict is Verdict.BLOCK
     assert result.details["years"] == 3
 
 
@@ -309,20 +318,20 @@ def test_which_figure_decides_is_the_specs_to_change(spec) -> None:
     loosened = copy.deepcopy(spec)
     loosened["gates"]["seniority"]["multiple_rule"] = "use_lowest"
 
-    result = seniority_check(loosened, body="ניסיון של 3 שנים ב-SQL, ניסיון של 6 שנים ב-BI")
+    result = seniority_check(loosened, body="ניסיון של 2 שנים ב-SQL, ניסיון של 6 שנים ב-BI")
 
     assert result.verdict is Verdict.PASS
-    assert result.details["years"] == 3
+    assert result.details["years"] == 2
 
 
 def test_a_range_is_one_demand_and_keeps_its_own_rule(spec) -> None:
-    """"3-5 years" is one requirement stated loosely, not two to satisfy, so the
-    range rule still reads it as 3 and the highest-figure rule does not touch
+    """"2-4 years" is one requirement stated loosely, not two to satisfy, so the
+    range rule still reads it as 2 and the highest-figure rule does not touch
     it."""
-    result = seniority_check(spec, body="ניסיון של 3-5 שנים בתפקיד דומה")
+    result = seniority_check(spec, body="ניסיון של 2-4 שנים בתפקיד דומה")
 
     assert result.verdict is Verdict.PASS
-    assert result.details["years"] == 3
+    assert result.details["years"] == 2
 
 
 def test_an_unstated_requirement_passes_because_the_spec_says_so(spec) -> None:

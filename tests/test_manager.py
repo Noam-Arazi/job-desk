@@ -2036,12 +2036,12 @@ def test_a_morning_that_fetched_nothing_says_so_on_the_phone(spec, store) -> Non
 
 def test_the_warning_sits_above_the_postings_and_not_under_them(spec, store) -> None:
     """A line printed after five jobs and their links is a line nobody reaches."""
-    analysed(store, "fp1", score=0.9, title="אנליסט נתונים בכיר")
+    analysed(store, "fp1", score=0.9, title="אנליסט נתונים לצוות המטה")
     tomorrow = build(store, spec, now=NOW + timedelta(days=1))
 
     message = render.as_telegram(tomorrow)
 
-    assert message.index(render._NO_ARRIVALS_HE) < message.index("אנליסט נתונים בכיר")
+    assert message.index(render._NO_ARRIVALS_HE) < message.index("אנליסט נתונים לצוות המטה")
 
 
 def test_a_scan_that_brought_postings_reports_the_count_instead(spec, store) -> None:
