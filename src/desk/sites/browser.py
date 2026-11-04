@@ -51,6 +51,15 @@ class BrowserFetcher:
                 pass
         return str(self._page.content())
 
+    def run(self, script: str, arg: Any = None) -> Any:
+        """Evaluate a script in the page as it stands, for a page that needs one
+        nudge before it shows everything (a filter, a load-more). Returns what
+        the script returns; reading the result is `html()`."""
+        return self._page.evaluate(script, arg)
+
+    def html(self) -> str:
+        return str(self._page.content())
+
     def close(self) -> None:
         # The tab is ours, the browser is Noam's: close the one, never the other.
         try:

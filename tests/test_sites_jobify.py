@@ -91,3 +91,38 @@ def test_a_body_already_stored_is_not_fetched_again() -> None:
     pages = Pages()
     jobify.crawl(None, spec=load_spec(), detail_fetcher=pages, have_body={"d8276eaefe2ea97b-id"})  # type: ignore[arg-type]
     assert not any("/jobs/" in url for url in pages.urls)
+
+
+class Browser(Pages):
+    """A fetcher that can run the shelf script, as the attached browser can."""
+
+    def __init__(self, state: dict) -> None:
+        super().__init__()
+        self.state = state
+        self.windows: list[int] = []
+
+    def run(self, script: str, arg: int) -> dict:
+        self.windows.append(arg)
+        return self.state
+
+    def html(self) -> str:
+        return SHELF
+
+
+def test_every_shelf_is_read_on_the_spec_window_and_not_the_last_visit() -> None:
+    browser = Browser({"window": "3", "total": 1, "cards": 1})
+    result = jobify.crawl(None, spec=load_spec(), detail_fetcher=browser)  # type: ignore[arg-type]
+
+    assert browser.windows == [3, 3]
+    assert not result.errors
+
+
+def test_a_shelf_left_short_or_on_another_window_is_said_out_loud() -> None:
+    left_short = Browser({"window": "3", "total": 31, "cards": 25})
+    not_widened = Browser({"window": "last_visit", "total": 9, "cards": 9})
+    short = jobify.crawl(None, spec=load_spec(), detail_fetcher=left_short)  # type: ignore[arg-type]
+    stuck = jobify.crawl(None, spec=load_spec(), detail_fetcher=not_widened)  # type: ignore[arg-type]
+
+    assert any("25 of 31" in e for e in short.errors)
+    assert any("window stayed 'last_visit'" in e for e in stuck.errors)
+    assert short.postings and stuck.postings

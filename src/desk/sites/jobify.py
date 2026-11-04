@@ -94,11 +94,76 @@ def parse_detail(html: str) -> dict[str, str]:
     }
 
 
+# 04.11.2026. A shelf opens on the account's own date filter, and its default is
+# "since my last visit". The morning pass read it at 04:11, Noam read it at noon,
+# and whatever arrived in between was his visit's and never the store's: Matrix's
+# AI Builder reached him and not the digest. A fixed window that overlaps the day
+# before cannot lose a posting to anyone's visit; the store already drops what it
+# holds. The filter is the site's own control, set the way its button sets it,
+# and Jobify keeps it on the account. A shelf also shows 25 cards and loads the
+# rest on scroll, so the script asks for more until it holds the shelf's total.
+_WIDEN = """async (days) => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const shelf = () => {
+    const el = [...document.querySelectorAll('[wire\\\\:id]')]
+      .find((e) => (e.getAttribute('wire:snapshot') || '').includes('sanitizeRole'));
+    return el ? Livewire.find(el.getAttribute('wire:id')) : null;
+  };
+  let c = shelf();
+  if (!c) return {error: 'no shelf component'};
+  if (String(c.get('publishDate')) !== String(days)) {
+    const apply = document.querySelector('[onclick*="applyFilters(1"]');
+    if (!apply) return {error: 'no filter button'};
+    changepublishDate(String(days));
+    $('#publishDateDropdown').val(String(days));
+    apply.click();
+    const widened = () => String(shelf().get('publishDate')) === String(days);
+    for (let i = 0; i < 20 && !widened(); i++) await sleep(500);
+    await sleep(2000);
+    c = shelf();
+  }
+  const cards = () => document.querySelectorAll("a.title[href*='/jobs/']").length;
+  for (let i = 0; i < 12 && cards() < Number(c.get('totalJobs') || 0); i++) {
+    const before = cards();
+    await c.call('loadMoreRoleJobsData');
+    await sleep(1500);
+    if (cards() === before) break;
+  }
+  const total = Number(c.get('totalJobs') || 0);
+  return {window: String(c.get('publishDate')), total: total, cards: cards()};
+}"""
+
+
 def settings_from_spec(spec: dict[str, Any]) -> dict[str, Any]:
     for entry in spec.get("sites", []):
         if entry.get("id") == SITE:
-            return {"max_details": int(entry.get("max_details", 150))}
-    return {"max_details": 150}
+            return {
+                "max_details": int(entry.get("max_details", 150)),
+                "window_days": int(entry.get("window_days", 3)),
+            }
+    return {"max_details": 150, "window_days": 3}
+
+
+def read_shelf(browser: Fetcher, slug: str, window_days: int) -> tuple[str, str]:
+    """One shelf's HTML, widened to the window and loaded to its last card.
+
+    The second value is a note for the run when the shelf could not be widened
+    or was left short; empty when it holds what the site says it holds. A
+    fetcher that cannot run a script (the test fakes) reads the page as served.
+    """
+    html = browser.get(shelf_url(slug))
+    run = getattr(browser, "run", None)
+    if run is None:
+        return html, ""
+    state = run(_WIDEN, window_days)
+    html = browser.html()  # type: ignore[attr-defined]
+    if not isinstance(state, dict) or state.get("error"):
+        return html, f"shelf {slug}: {state.get('error') if isinstance(state, dict) else state}"
+    if state.get("window") != str(window_days):
+        return html, f"shelf {slug}: window stayed '{state.get('window')}'"
+    if state.get("cards", 0) < state.get("total", 0):
+        return html, f"shelf {slug}: {state['cards']} of {state['total']} cards loaded"
+    return html, ""
 
 
 def crawl(
@@ -121,7 +186,8 @@ def crawl(
         result.errors.append("the job-desk Chrome window is not open; Jobify needs it signed in")
         return result
     browser = detail_fetcher
-    budget = settings_from_spec(spec)["max_details"] if max_details is None else max_details
+    settings = settings_from_spec(spec)
+    budget = settings["max_details"] if max_details is None else max_details
     known = have_body or set()
     stamp = (now or datetime.now()).isoformat(timespec="seconds")
 
@@ -135,10 +201,13 @@ def crawl(
     matched: dict[str, list[str]] = {}
     for slug in slugs:
         try:
-            cards = parse_shelf(browser.get(shelf_url(slug)))
+            html, short = read_shelf(browser, slug, settings["window_days"])
+            cards = parse_shelf(html)
         except Exception as exc:
             result.errors.append(f"shelf {slug}: {exc}")
             continue
+        if short:
+            result.errors.append(short)
         result.pages_fetched += 1
         for card in cards:
             key = card["external_id"]

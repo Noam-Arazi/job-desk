@@ -588,7 +588,9 @@ sites:
     server_side_filters:           # applied by the site, not by us
       radius_km_from: haifa
       salary_floor_nis: 10000
-      window: since_my_last_visit
+    window_days: 3                 # 04.11.2026 — was the account's "since my last visit":
+                                   # Noam's own visits ate the window between two mornings,
+                                   # so the pass sets the site's 3-day filter (kept on the account)
     notes: >
       An aggregator, not a board — Joint / Ministry of Labour backed. It fans
       in at least eight sources and two of them are already ours: the URL
