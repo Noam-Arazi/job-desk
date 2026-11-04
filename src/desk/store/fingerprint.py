@@ -75,3 +75,22 @@ def role_key(title: str, company: str) -> tuple[str, str] | None:
     if not employer or not head:
         return None
     return employer, head
+
+
+# A tracker row names an employer the way Noam reads it, `פרוסיד (Proceed)`,
+# while each board prints one of the two, `פרוסיד` on alljobs and `Proceed` on
+# drushim, so the bracket is an alias and not part of the name.
+_ALIAS = re.compile(r"\(([^)]*)\)")
+
+
+def role_keys(title: str, company: str) -> frozenset[tuple[str, str]]:
+    """Every `role_key` the posting answers to: the full name, and each alias.
+
+    Two listings are the same role when any of their keys agree. Empty when the
+    employer is anonymous, like `role_key`, so a bracket never rescues one.
+    """
+    names = [company, _ALIAS.sub(" ", company), *_ALIAS.findall(company)]
+    keys = (role_key(title, name) for name in names)
+    if role_key(title, company) is None:
+        return frozenset()
+    return frozenset(k for k in keys if k is not None)

@@ -350,3 +350,23 @@ def test_hebrew_gender_endings_are_not_title_separators():
 
     title = "מפתח/ת AI ג׳וניור/ית — אגף מערכות מידע"
     assert role_key(title, "איכילוב") == ("איכילוב", "מפתח ai ג׳וניור")
+
+
+def test_a_bracketed_alias_in_the_tracker_matches_either_name(tmp_path):
+    store = Store(tmp_path / "d.sqlite")
+    title = "מנהל/ת פרויקטים טכנולוגיים במערכות מידע"
+    tracked = _seen(store, "manual", title, "פרוסיד (Proceed)", "ירושלים / מודיעין / חולון")
+    store.mark_applied(tracked, now="2026-11-03")
+
+    spaced = "מנהל /ת פרויקטים טכנולוגיים במערכות מידע"
+    assert store.has_applied(_seen(store, "alljobs", spaced, "פרוסיד", "חולון"))
+    assert store.has_applied(_seen(store, "drushim", title, "Proceed‏", "חולון"))
+    other = _seen(store, "alljobs", "PMO - מתאם /ת פרויקטים", "פרוסיד", "ירושלים")
+    assert not store.has_applied(other)
+    store.close()
+
+
+def test_a_bracket_never_rescues_an_anonymous_employer(tmp_path):
+    from desk.store.fingerprint import role_keys
+
+    assert role_keys("אנליסט/ית פיננסי/ת", "סיאל גיוס והשמה (לקוח חסוי)") == frozenset()

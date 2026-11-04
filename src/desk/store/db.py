@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from .fingerprint import fingerprint as make_fingerprint
-from .fingerprint import role_key
+from .fingerprint import role_keys
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -409,14 +409,14 @@ class Store:
         ).fetchone()
         if posting is None:
             return False
-        key = role_key(posting["title"] or "", posting["company"] or "")
-        if key is None:
+        keys = role_keys(posting["title"] or "", posting["company"] or "")
+        if not keys:
             return False
         applied = self.conn.execute(
             "SELECT DISTINCT p.title, p.company FROM applications a"
             " JOIN postings p ON p.fingerprint = a.fingerprint"
         ).fetchall()
-        return any(role_key(r["title"] or "", r["company"] or "") == key for r in applied)
+        return any(keys & role_keys(r["title"] or "", r["company"] or "") for r in applied)
 
     # -- decisions --------------------------------------------------------
 
