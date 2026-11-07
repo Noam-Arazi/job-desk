@@ -70,6 +70,9 @@ telemetry.
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
@@ -281,7 +284,45 @@ def parse_detail(html: str) -> dict[str, str]:
     return {"body": body, "stated_experience": seniority}
 
 
-def url_for(term: str, start: int, *, days: int, location: str) -> str:
+RATE_LIMIT_RETRY_SECONDS = 30
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    return str(exc).startswith("429 ")
+
+
+def _get(fetcher: Fetcher, url: str, *, first_page: bool, pause: Callable[[float], None]) -> str:
+    """A term's first page is worth one more try after a 429; a deeper one is not.
+
+    Missing page one loses the whole term for the day. Missing page four loses
+    a handful of postings the narrow window has already mostly delivered.
+    """
+    try:
+        return fetcher.get(url)
+    except Exception as exc:
+        if not (first_page and _is_rate_limit(exc)):
+            raise
+        pause(RATE_LIMIT_RETRY_SECONDS)
+        return fetcher.get(url)
+
+
+def window_days(last_fetch: datetime | None, now: datetime, *, ceiling: float = 7) -> float:
+    """How far back to ask LinkedIn for: the time since the last fetch, plus six hours.
+
+    07.11.2026. The guest feed is not ordered by date and ignores `sortBy=DD`
+    (measured: identical cards with and without it), so a seven-day window read
+    six pages deep sampled the week instead of covering what was new. A two-day
+    window still filled all six offsets on broad terms, so the window is the
+    exact gap — `f_TPR` takes seconds — with a margin for a run that started
+    late. A missed morning widens the next window instead of losing a day.
+    """
+    if last_fetch is None:
+        return ceiling
+    elapsed = (now - last_fetch).total_seconds() / 86400 + 0.25
+    return max(0.25, min(ceiling, elapsed))
+
+
+def url_for(term: str, start: int, *, days: float, location: str) -> str:
     """One search request: a term, a place, a window, an offset.
 
     The window is a parameter and not a constant because the daily run and the
@@ -289,7 +330,7 @@ def url_for(term: str, start: int, *, days: int, location: str) -> str:
     """
     params = {"keywords": term, "location": location, "start": max(0, int(start))}
     if days > 0:
-        params["f_TPR"] = f"r{int(days) * 86400}"
+        params["f_TPR"] = f"r{round(days * 86400)}"
     return f"{SEARCH_URL}?{urlencode(params)}"
 
 
@@ -330,11 +371,12 @@ def crawl(
     spec: dict[str, Any],
     max_pages: int = 6,
     terms: list[str] | None = None,
-    days: int = 7,
+    days: float = 7,
     with_details: bool = True,
     max_details: int | None = None,
     detail_fetcher: Fetcher | None = None,
     have_body: set[str] | None = None,
+    pause: Callable[[float], None] = time.sleep,
     **_ignored: Any,
 ) -> SiteResult:
     """Walk each term's offsets until LinkedIn says there is nothing more.
@@ -372,8 +414,15 @@ def crawl(
         for page in range(max_pages):
             url = url_for(term, page * PAGE_SIZE, days=days, location=location)
             try:
-                html = fetcher.get(url)
+                html = _get(fetcher, url, first_page=page == 0, pause=pause)
             except Exception as exc:  # this term's problem, not the run's
+                if page > 0 and _is_rate_limit(exc):
+                    # 07.11.2026 — the window is now only the days since the
+                    # last fetch, so the pages already read hold what is new.
+                    # A 429 deeper in is the end of this term, not a failure:
+                    # it used to mark every morning failed while delivering.
+                    stops.append(f"{term!r}: rate-limited at offset {page * PAGE_SIZE}")
+                    break
                 result.errors.append(f"{term!r} offset {page * PAGE_SIZE}: {exc}")
                 break
 

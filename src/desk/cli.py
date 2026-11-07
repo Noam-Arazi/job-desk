@@ -99,9 +99,15 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(f"browser  {'attached' if attached else 'not open'}")
         extra["detail_fetcher"] = attached
         with Store(paths().ensure().db) as store:
-            extra["have_body"] = {
-                str(row["external_id"]) for row in store.postings_from(args.site) if row["body"]
-            }
+            rows = store.postings_from(args.site)
+            extra["have_body"] = {str(row["external_id"]) for row in rows if row["body"]}
+        if args.site == "linkedin":
+            last = max((str(row["fetched_at"]) for row in rows), default="")
+            extra["days"] = linkedin.window_days(
+                datetime.fromisoformat(last) if last else None, now
+            )
+            since = last[:16] or "never"
+            print(f"window   {extra['days'] * 24:.0f} hours (last fetch {since})")
 
     try:
         result = MODULES[args.site](

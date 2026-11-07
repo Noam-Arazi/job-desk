@@ -395,3 +395,79 @@ def test_a_body_already_stored_is_not_asked_for_again() -> None:
 
     assert len(browser.urls) == 1 and ids[0] in browser.urls[0]
     assert "/jobs/view/" in browser.urls[0]
+
+
+class _RateLimited:
+    """Serves the fixture, and a 429 for every URL matching `limited` — the
+    first `times` requests to it only, or always when `times` is None."""
+
+    def __init__(self, limited: str, times: int | None = None) -> None:
+        self.limited, self.times, self.requested = limited, times, []
+
+    def get(self, url: str) -> str:
+        from desk.sites.http import FetchError
+
+        self.requested.append(url)
+        if self.limited in url and (self.times is None or self.times > 0):
+            if self.times is not None:
+                self.times -= 1
+            raise FetchError(f"429 for {url}")
+        return FIXTURE.read_text(encoding="utf-8")
+
+
+def test_a_429_past_the_first_page_ends_the_term_without_failing_the_run() -> None:
+    """07.11.2026 — it used to mark every morning failed while still delivering."""
+    fetcher = _RateLimited("start=20")
+
+    result = linkedin.crawl(
+        fetcher, spec=load_spec(), terms=["data analyst"], max_pages=6, with_details=False
+    )
+
+    assert result.ok
+    assert result.pages_fetched == 2
+    assert "rate-limited at offset 20" in result.stopped_because
+
+
+def test_a_429_on_the_first_page_is_retried_once_after_a_pause() -> None:
+    fetcher = _RateLimited("start=0", times=1)
+    pauses: list[float] = []
+
+    result = linkedin.crawl(
+        fetcher,
+        spec=load_spec(),
+        terms=["data analyst"],
+        max_pages=1,
+        with_details=False,
+        pause=pauses.append,
+    )
+
+    assert result.ok
+    assert pauses == [linkedin.RATE_LIMIT_RETRY_SECONDS]
+    assert len(result.postings) == 3
+
+
+def test_a_first_page_still_limited_after_the_retry_is_an_error() -> None:
+    fetcher = _RateLimited("start=0")
+
+    result = linkedin.crawl(
+        fetcher,
+        spec=load_spec(),
+        terms=["data analyst"],
+        max_pages=6,
+        with_details=False,
+        pause=lambda _: None,
+    )
+
+    assert not result.ok
+    assert "offset 0" in result.errors[0]
+
+
+def test_the_window_is_the_time_since_the_last_fetch_plus_six_hours() -> None:
+    from datetime import datetime, timedelta
+
+    now = datetime(2026, 11, 7, 4, 0)
+    assert linkedin.window_days(now - timedelta(hours=24), now) == pytest.approx(1.25)
+    assert linkedin.window_days(now - timedelta(minutes=5), now) == pytest.approx(0.25, abs=0.01)
+    assert linkedin.window_days(now - timedelta(days=30), now) == 7
+    assert linkedin.window_days(None, now) == 7
+    assert "f_TPR=r108000" in linkedin.url_for("x", 0, days=1.25, location="Israel")

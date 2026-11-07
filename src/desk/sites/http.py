@@ -61,7 +61,14 @@ class HttpFetcher:
         status = getattr(response, "status", 0)
         if status != 200:
             raise FetchError(f"{status} for {url}")
-        return str(response.html_content)
+        try:
+            return str(response.html_content)
+        except TypeError:
+            # 07.11.2026 — a body with no element in it (LinkedIn's 26-byte
+            # end-of-results, a doctype and an empty comment) has no root for
+            # lxml to serialise. The raw bytes are the answer, and the site
+            # module's sentinel check is what reads them.
+            return bytes(getattr(response, "body", b"") or b"").decode("utf-8", "replace")
 
 
 class FixtureFetcher:
