@@ -41,6 +41,7 @@ from today and reporting a three-week-old silence as fresh.
 from __future__ import annotations
 
 import csv
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -226,7 +227,7 @@ def plan(
             _ = entry.state
         except UnknownStatus:
             continue
-        fp = entry.fingerprint
+        fp = _board_fingerprint(entry, store) or entry.fingerprint
         body, filename = body_for(entry, saved)
         rows.append(
             Row(
@@ -240,6 +241,27 @@ def plan(
             )
         )
     return rows
+
+
+_LINK = re.compile(r"[\w.-]+\.[a-z]{2,}/[^\s,()]+", re.IGNORECASE)
+
+
+def _board_fingerprint(entry: Entry, store: Store) -> str | None:
+    """The scraped posting the tracker row links to, when it names one.
+
+    Agency rows are written under the agency's own words — "לין ביכלר (חברת
+    השמה; מעסיק חסוי)" against the board's "לין ביכלר ראשי" — so the name never
+    meets the board's copy, and the job came back the morning after it was
+    applied to. The link the row carries in `source` or `via` is exact.
+    """
+    for link in _LINK.findall(f"{entry.source} {entry.via}"):
+        row = store.conn.execute(
+            "SELECT fingerprint FROM postings WHERE site != ? AND url LIKE ? LIMIT 1",
+            (SITE, f"%{link.rstrip('/')}%"),
+        ).fetchone()
+        if row is not None:
+            return str(row["fingerprint"])
+    return None
 
 
 def _posting(entry: Entry, fingerprint: str, body: str = "") -> Posting:

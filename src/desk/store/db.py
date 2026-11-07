@@ -408,6 +408,17 @@ class Store:
             "SELECT title, company FROM postings WHERE fingerprint = ? LIMIT 1", (fingerprint,)
         ).fetchone()
         if posting is None:
+            # An analysis can outlive its posting row: the board's copy was
+            # re-fingerprinted and the old judgement stayed behind. Binat's
+            # Business Analyst came back on 06.11 that way, the morning after
+            # the application, so the name is read from the analysis instead.
+            posting = self.conn.execute(
+                "SELECT json_extract(payload, '$.title') AS title,"
+                " json_extract(payload, '$.company') AS company"
+                " FROM analyses WHERE fingerprint = ? LIMIT 1",
+                (fingerprint,),
+            ).fetchone()
+        if posting is None:
             return False
         keys = role_keys(posting["title"] or "", posting["company"] or "")
         if not keys:
