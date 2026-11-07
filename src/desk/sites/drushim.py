@@ -30,8 +30,12 @@ ignored. Past the end the API returns an empty list, which ends the term.
 
 **The fetcher hands back HTML, not JSON.** `HttpFetcher` returns Scrapling's
 `html_content`, which wraps the body in `<html><body>…</body></html>`, escapes
-`&` as `&amp;`, and turns the `<br/>` inside descriptions into `<br>`. `_load`
-undoes exactly that and nothing more. Raw JSON (the fixture) is read as is.
+`&` as `&amp;`, turns the `<br/>` inside descriptions into `<br>`, and — the
+lossy part — decodes the `&quot;` some adverts carry into a bare `"` that ends
+the JSON string early (2 of 173 pages on the first live run). `_load` undoes
+exactly that and nothing more; a page it still cannot read is an error on the
+run. Raw JSON (the fixture) is read as is. The clean fix is a fetcher method
+that returns the response body untouched, which belongs in `http.py`.
 
 **The id is the old one.** The site has two codes per job. `Code` is in the
 URL (`/job/38870127/…`); `JobInfo.STSJobCode` (30766447) is what the old cards
@@ -88,13 +92,73 @@ _BREAK = re.compile(r"<br\s*/?>", re.I)
 _TAG = re.compile(r"<[^>]+>")
 
 
+_VALUE_START = set('"{[-0123456789tfn')
+
+
+def _closes(text: str, j: int) -> bool:
+    """Whether a quote just before `j` can end a JSON string: what follows it
+    must be structure, and a `,` or `:` must itself be followed by a value."""
+    n = len(text)
+    while j < n and text[j].isspace():
+        j += 1
+    if j >= n or text[j] in "}]":
+        return True
+    if text[j] not in ",:":
+        return False
+    j += 1
+    while j < n and text[j].isspace():
+        j += 1
+    return j < n and text[j] in _VALUE_START
+
+
+def _escape_stray_quotes(text: str) -> str:
+    """Escape every quote inside a JSON string that cannot be its end.
+
+    Adverts carry `&quot;` inside JSON strings ("גו&quot;ח"). The HTML parser
+    behind the fetcher decodes that to a bare `"`, which would end the string
+    early. Only that is repaired; anything it gets wrong still fails to decode,
+    so a page this cannot read is an error on the run and never a silent zero.
+    """
+    out: list[str] = []
+    in_string = False
+    i, n = 0, len(text)
+    while i < n:
+        char = text[i]
+        if in_string and char == "\\":
+            out.append(text[i : i + 2])
+            i += 2
+            continue
+        if char == '"':
+            if not in_string:
+                in_string = True
+                out.append(char)
+            elif _closes(text, i + 1):
+                in_string = False
+                out.append(char)
+            else:
+                out.append('\\"')
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
+
+
+def _decode(text: str, *, repair: bool) -> Any:
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        if not repair:
+            raise
+    return json.loads(_escape_stray_quotes(text), strict=False)
+
+
 def _load(text: str) -> dict[str, Any]:
     """The API's JSON, from either the raw body or Scrapling's HTML wrapping of it."""
     wrapped = _WRAPPER.match(text)
     if wrapped:
         text = html.unescape(wrapped.group(1))
     try:
-        data = json.loads(text, strict=False)
+        data = _decode(text, repair=bool(wrapped))
     except json.JSONDecodeError as exc:
         raise ValueError(f"not the search API's JSON ({exc}); starts {text[:80]!r}") from exc
     if not isinstance(data, dict) or "ResultList" not in data:

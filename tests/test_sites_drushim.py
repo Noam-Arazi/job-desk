@@ -76,6 +76,22 @@ def test_the_fetchers_html_wrapping_reads_the_same_as_raw_json(page: str) -> Non
     assert raw == via_fetcher
 
 
+def test_an_html_quote_in_an_advert_survives_the_fetchers_wrapping(page: str) -> None:
+    """Live 2026-11-07: an advert wrote "גו&quot;ח" inside the JSON. The HTML
+    parser decodes that to a bare quote, which ended the JSON string early and
+    lost two pages of the first run."""
+    data = json.loads(page)
+    data["ResultList"][0]["JobContent"]["Description"] = "קשר מול גו&quot;ח ו&quot;רשויות&quot;"
+    data["ResultList"][1]["JobContent"]["Requirements"] = "תואר &quot;ראשון&quot;, חובה"
+    raw = json.dumps(data, ensure_ascii=False)
+    wrapped = str(selector(raw).html_content)
+
+    via_fetcher = drushim.parse(wrapped, now=NOW)["postings"]
+
+    assert via_fetcher == drushim.parse(raw, now=NOW)["postings"]
+    assert 'גו"ח' in via_fetcher[0].body
+
+
 def test_a_no_match_page_as_the_fetcher_returned_it_parses_to_nothing(no_match: str) -> None:
     result = drushim.parse(no_match, now=NOW)
 
