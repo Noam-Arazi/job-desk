@@ -61,6 +61,12 @@ class HttpFetcher:
         status = getattr(response, "status", 0)
         if status != 200:
             raise FetchError(f"{status} for {url}")
+        content_type = str((getattr(response, "headers", None) or {}).get("content-type", ""))
+        if "json" in content_type.lower():
+            # 07.11.2026 — Drushim's search API. Read as HTML, the JSON came
+            # back wrapped in <html><body> with &quot; inside adverts turned
+            # into bare quotes, which broke the parse on 2 pages in 173.
+            return bytes(getattr(response, "body", b"") or b"").decode("utf-8", "replace")
         try:
             return str(response.html_content)
         except TypeError:
