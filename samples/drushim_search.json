@@ -1,0 +1,2057 @@
+{
+ "ExtentionResultList": [],
+ "SearchSuggestions": {
+  "RecommendedSubCategories": [],
+  "RecommendedCategories": [],
+  "RecommendedZones": [],
+  "RecommendedRegions": [],
+  "OfferExactSearch": false,
+  "OfferBackToExtendedSearch": false
+ },
+ "Filters": {
+  "FilterByCategory": {
+   "Title": {
+    "Key": "CategoryFilterTitle",
+    "Value": "קטגוריה"
+   },
+   "QueryParamName": "catdir",
+   "Options": [
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 23,
+     "Link": "/jobs/cat30/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 30,
+     "NameInHebrew": "אבטחת מידע"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 9,
+     "Link": "/jobs/cat1/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 1,
+     "NameInHebrew": "אדמיניסטרציה"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 7,
+     "Link": "/jobs/cat28/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 28,
+     "NameInHebrew": "אינטרנט"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 10,
+     "Link": "/jobs/cat23/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 23,
+     "NameInHebrew": "ביטוח"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 12,
+     "Link": "/jobs/cat2/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 2,
+     "NameInHebrew": "בכירים / ניהול"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 51,
+     "Link": "/jobs/cat24/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 24,
+     "NameInHebrew": "הייטק-QA"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 4,
+     "Link": "/jobs/cat4/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 4,
+     "NameInHebrew": "הייטק-חומרה"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 160,
+     "Link": "/jobs/cat5/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 5,
+     "NameInHebrew": "הייטק-כללי"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 65,
+     "Link": "/jobs/cat6/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 6,
+     "NameInHebrew": "הייטק-תוכנה"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 19,
+     "Link": "/jobs/cat10/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 10,
+     "NameInHebrew": "הנדסה"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 24,
+     "Link": "/jobs/cat8/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 8,
+     "NameInHebrew": "כללי"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 153,
+     "Link": "/jobs/cat9/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 9,
+     "NameInHebrew": "כספים / שוק ההון"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 7,
+     "Link": "/jobs/cat21/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 21,
+     "NameInHebrew": "לוגיסטיקה / שילוח"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 6,
+     "Link": "/jobs/cat20/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 20,
+     "NameInHebrew": "מדעים / ביוטק"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 9,
+     "Link": "/jobs/cat17/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 17,
+     "NameInHebrew": "מכירות"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 6,
+     "Link": "/jobs/cat14/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 14,
+     "NameInHebrew": "עריכת דין"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 10,
+     "Link": "/jobs/cat15/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 15,
+     "NameInHebrew": "פרסום / מדיה / תקשורת"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 12,
+     "Link": "/jobs/cat16/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 16,
+     "NameInHebrew": "רפואה / בריאות"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 7,
+     "Link": "/jobs/cat27/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 27,
+     "NameInHebrew": "שיווק"
+    },
+    {
+     "IsSelected": false,
+     "Areas": [],
+     "NumberOfJobs": 12,
+     "Link": "/jobs/cat11/?searchterm=אנליסט&isaa=true&ssaen=3&range=3",
+     "Code": 11,
+     "NameInHebrew": "שירות לקוחות"
+    }
+   ],
+   "Selected": []
+  },
+  "FilterBySubCategory": {
+   "Title": {
+    "Key": "SubCategoryFilterTitle",
+    "Value": "תחום"
+   },
+   "QueryParamName": "subcat",
+   "Options": [
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 15,
+     "Link": "/jobs/subcat/476/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      9
+     ],
+     "Code": 476,
+     "NameInHebrew": "Back Office - פיננסים"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 35,
+     "Link": "/jobs/subcat/70/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5,
+      6
+     ],
+     "Code": 70,
+     "NameInHebrew": "BI"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 36,
+     "Link": "/jobs/subcat/581/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5
+     ],
+     "Code": 581,
+     "NameInHebrew": "Data Analyst"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 14,
+     "Link": "/jobs/subcat/548/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      6
+     ],
+     "Code": 548,
+     "NameInHebrew": "PL \\ SQL"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 28,
+     "Link": "/jobs/subcat/297/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      24
+     ],
+     "Code": 297,
+     "NameInHebrew": "איש/ת / הנדסאי/ת QA"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 15,
+     "Link": "/jobs/subcat/615/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5
+     ],
+     "Code": 615,
+     "NameInHebrew": "איש/ת מערכות מידע"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 139,
+     "Link": "/jobs/subcat/96/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      9
+     ],
+     "Code": 96,
+     "NameInHebrew": "אנליסט/ית"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 13,
+     "Link": "/jobs/subcat/538/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      30
+     ],
+     "Code": 538,
+     "NameInHebrew": "אנליסט/ית סייבר"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 16,
+     "Link": "/jobs/subcat/307/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      24
+     ],
+     "Code": 307,
+     "NameInHebrew": "בדיקות אוטומטיות"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 42,
+     "Link": "/jobs/subcat/306/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      24
+     ],
+     "Code": 306,
+     "NameInHebrew": "בדיקות ידניות"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 19,
+     "Link": "/jobs/subcat/723/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      9
+     ],
+     "Code": 723,
+     "NameInHebrew": "בקרה תקציבית"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 15,
+     "Link": "/jobs/subcat/86/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      8
+     ],
+     "Code": 86,
+     "NameInHebrew": "חייל/ת משוחרר/ת"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 90,
+     "Link": "/jobs/subcat/100/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      9
+     ],
+     "Code": 100,
+     "NameInHebrew": "כלכלן/ית"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 25,
+     "Link": "/jobs/subcat/299/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      24
+     ],
+     "Code": 299,
+     "NameInHebrew": "מהנדס/ת QA"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 27,
+     "Link": "/jobs/subcat/56/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5
+     ],
+     "Code": 56,
+     "NameInHebrew": "מנהל/ת פרויקטים"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 94,
+     "Link": "/jobs/subcat/235/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5
+     ],
+     "Code": 235,
+     "NameInHebrew": "מנתח/ת מערכות"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 29,
+     "Link": "/jobs/subcat/705/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5
+     ],
+     "Code": 705,
+     "NameInHebrew": "מנתח/ת מערכות פיננסיות"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 17,
+     "Link": "/jobs/subcat/209/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      5
+     ],
+     "Code": 209,
+     "NameInHebrew": "משרות הייטק כללי"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 16,
+     "Link": "/jobs/subcat/88/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      8
+     ],
+     "Code": 88,
+     "NameInHebrew": "סטודנט/ית"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 17,
+     "Link": "/jobs/subcat/631/search/אנליסט/?isaa=true&ssaen=3&range=3",
+     "Categories": [
+      9
+     ],
+     "Code": 631,
+     "NameInHebrew": "רפרנט/ית אשראי"
+    }
+   ],
+   "Selected": []
+  },
+  "FilterByZones": {
+   "Title": {
+    "Key": "ZoneFilterTitle",
+    "Value": "איזור"
+   },
+   "QueryParamName": "Area",
+   "Options": [
+    {
+     "IsSelected": false,
+     "Cities": [
+      {
+       "Link": "/jobs/area/30-31-32-33-34/?searchterm=אנליסט&geolexid=539067&isaa=true&ssaen=3&range=3",
+       "Code": 1238,
+       "NameInHebrew": "דרום",
+       "GeoLexId": 539067,
+       "IsSelected": false,
+       "RegionIds": [
+        30,
+        31,
+        32,
+        33,
+        34
+       ],
+       "NameInEnglish": "South"
+      }
+     ],
+     "NumberOfJobs": 58,
+     "NameInEnglish": "South",
+     "GeoLexId": 539067,
+     "RegionIds": [
+      30,
+      31,
+      32,
+      33,
+      34
+     ],
+     "Link": "/jobs/area/30-31-32-33-34/?searchterm=אנליסט&geolexid=539067&isaa=true&ssaen=3&range=3",
+     "Code": 4,
+     "NameInHebrew": "דרום"
+    },
+    {
+     "IsSelected": false,
+     "Cities": [],
+     "NumberOfJobs": 83,
+     "NameInEnglish": "Judea and Samaria",
+     "GeoLexId": 539072,
+     "RegionIds": [
+      36,
+      37,
+      38,
+      39,
+      40,
+      41
+     ],
+     "Link": "/jobs/area/36-37-38-39-40-41/?searchterm=אנליסט&geolexid=539072&isaa=true&ssaen=3&range=3",
+     "Code": 21,
+     "NameInHebrew": "יהודה ושומרון"
+    },
+    {
+     "IsSelected": false,
+     "Cities": [
+      {
+       "Link": "/jobs/area/18/?searchterm=אנליסט&geolexid=537511&isaa=true&ssaen=3&range=3",
+       "Code": 1133,
+       "NameInHebrew": "ירושלים",
+       "GeoLexId": 537511,
+       "IsSelected": false,
+       "RegionIds": [
+        18
+       ],
+       "NameInEnglish": "\tJerusalem\t"
+      }
+     ],
+     "NumberOfJobs": 117,
+     "NameInEnglish": "Jerusalem",
+     "GeoLexId": 539070,
+     "RegionIds": [
+      18,
+      19,
+      20
+     ],
+     "Link": "/jobs/area/18-19-20/?searchterm=אנליסט&geolexid=539070&isaa=true&ssaen=3&range=3",
+     "Code": 2,
+     "NameInHebrew": "ירושלים"
+    },
+    {
+     "IsSelected": false,
+     "Cities": [
+      {
+       "Link": "/jobs/area/2/?searchterm=אנליסט&geolexid=539119&isaa=true&ssaen=3&range=3",
+       "Code": 375,
+       "NameInHebrew": "בני ברק",
+       "GeoLexId": 539119,
+       "IsSelected": false,
+       "RegionIds": [
+        2
+       ],
+       "NameInEnglish": "\tBnei Brak\t"
+      },
+      {
+       "Link": "/jobs/area/1/?searchterm=אנליסט&geolexid=540298&isaa=true&ssaen=3&range=3",
+       "Code": 1230,
+       "NameInHebrew": "גוש דן",
+       "GeoLexId": 540298,
+       "IsSelected": false,
+       "RegionIds": [
+        1
+       ],
+       "NameInEnglish": "Gush Dan"
+      },
+      {
+       "Link": "/jobs/area/3/?searchterm=אנליסט&geolexid=539086&isaa=true&ssaen=3&range=3",
+       "Code": 371,
+       "NameInHebrew": "חולון",
+       "GeoLexId": 539086,
+       "IsSelected": false,
+       "RegionIds": [
+        3
+       ],
+       "NameInEnglish": "\tHolon\t"
+      },
+      {
+       "Link": "/jobs/area/7/?searchterm=אנליסט&geolexid=539097&isaa=true&ssaen=3&range=3",
+       "Code": 430,
+       "NameInHebrew": "לוד",
+       "GeoLexId": 539097,
+       "IsSelected": false,
+       "RegionIds": [
+        7
+       ],
+       "NameInEnglish": "\tLod\t"
+      },
+      {
+       "Link": "/jobs/area/8/?searchterm=אנליסט&geolexid=539082&isaa=true&ssaen=3&range=3",
+       "Code": 429,
+       "NameInHebrew": "מודיעין-מכבים-רעות",
+       "GeoLexId": 539082,
+       "IsSelected": false,
+       "RegionIds": [
+        8
+       ],
+       "NameInEnglish": "\tModiin-Maccabim-Reut\t"
+      },
+      {
+       "Link": "/jobs/area/1-2-3-4-5-6-7-8-9/?searchterm=אנליסט&geolexid=539071&isaa=true&ssaen=3&range=3",
+       "Code": 1235,
+       "NameInHebrew": "מרכז",
+       "GeoLexId": 539071,
+       "IsSelected": false,
+       "RegionIds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+       ],
+       "NameInEnglish": "Centre"
+      },
+      {
+       "Link": "/jobs/area/5/?searchterm=אנליסט&geolexid=539128&isaa=true&ssaen=3&range=3",
+       "Code": 482,
+       "NameInHebrew": "פתח תקווה",
+       "GeoLexId": 539128,
+       "IsSelected": false,
+       "RegionIds": [
+        5
+       ],
+       "NameInEnglish": "\tPetah Tikva\t"
+      },
+      {
+       "Link": "/jobs/area/4/?searchterm=אנליסט&geolexid=539078&isaa=true&ssaen=3&range=3",
+       "Code": 385,
+       "NameInHebrew": "ראשון לציון",
+       "GeoLexId": 539078,
+       "IsSelected": false,
+       "RegionIds": [
+        4
+       ],
+       "NameInEnglish": "\tRishon LeTsiyon\t"
+      },
+      {
+       "Link": "/jobs/area/2/?searchterm=אנליסט&geolexid=539120&isaa=true&ssaen=3&range=3",
+       "Code": 376,
+       "NameInHebrew": "רמת גן",
+       "GeoLexId": 539120,
+       "IsSelected": false,
+       "RegionIds": [
+        2
+       ],
+       "NameInEnglish": "\tRamat Gan\t"
+      },
+      {
+       "Link": "/jobs/area/1/?searchterm=אנליסט&geolexid=537905&isaa=true&ssaen=3&range=3",
+       "Code": 380,
+       "NameInHebrew": "תל אביב",
+       "GeoLexId": 537905,
+       "IsSelected": false,
+       "RegionIds": [
+        1
+       ],
+       "NameInEnglish": "Tel Aviv"
+      }
+     ],
+     "NumberOfJobs": 354,
+     "NameInEnglish": "Center",
+     "GeoLexId": 539071,
+     "RegionIds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+     ],
+     "Link": "/jobs/area/1-2-3-4-5-6-7-8-9/?searchterm=אנליסט&geolexid=539071&isaa=true&ssaen=3&range=3",
+     "Code": 1,
+     "NameInHebrew": "מרכז"
+    },
+    {
+     "IsSelected": false,
+     "Cities": [
+      {
+       "Link": "/jobs/area/21/?searchterm=אנליסט&geolexid=539095&isaa=true&ssaen=3&range=3",
+       "Code": 690,
+       "NameInHebrew": "חיפה",
+       "GeoLexId": 539095,
+       "IsSelected": false,
+       "RegionIds": [
+        21
+       ],
+       "NameInEnglish": "\tHaifa\t"
+      },
+      {
+       "Link": "/jobs/area/21/?searchterm=אנליסט&geolexid=540297&isaa=true&ssaen=3&range=3",
+       "Code": 1229,
+       "NameInHebrew": "חיפה והקריות",
+       "GeoLexId": 540297,
+       "IsSelected": false,
+       "RegionIds": [
+        21
+       ],
+       "NameInEnglish": "Haifa and the Krayot"
+      },
+      {
+       "Link": "/jobs/area/21-22-23-24-25-26-27-28-29/?searchterm=אנליסט&geolexid=537903&isaa=true&ssaen=3&range=3",
+       "Code": 1237,
+       "NameInHebrew": "צפון",
+       "GeoLexId": 537903,
+       "IsSelected": false,
+       "RegionIds": [
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+       ],
+       "NameInEnglish": "North"
+      }
+     ],
+     "NumberOfJobs": 63,
+     "NameInEnglish": "North",
+     "GeoLexId": 537903,
+     "RegionIds": [
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+     ],
+     "Link": "/jobs/area/21-22-23-24-25-26-27-28-29/?searchterm=אנליסט&geolexid=537903&isaa=true&ssaen=3&range=3",
+     "Code": 3,
+     "NameInHebrew": "צפון"
+    },
+    {
+     "IsSelected": false,
+     "Cities": [],
+     "NumberOfJobs": 237,
+     "NameInEnglish": "Ashfela",
+     "GeoLexId": 539068,
+     "RegionIds": [
+      15,
+      16,
+      17
+     ],
+     "Link": "/jobs/area/15-16-17/?searchterm=אנליסט&geolexid=539068&isaa=true&ssaen=3&range=3",
+     "Code": 17,
+     "NameInHebrew": "שפלה"
+    },
+    {
+     "IsSelected": false,
+     "Cities": [
+      {
+       "Link": "/jobs/area/12/?searchterm=אנליסט&geolexid=539099&isaa=true&ssaen=3&range=3",
+       "Code": 381,
+       "NameInHebrew": "הרצליה",
+       "GeoLexId": 539099,
+       "IsSelected": false,
+       "RegionIds": [
+        12
+       ],
+       "NameInEnglish": "\tHerzliya\t"
+      },
+      {
+       "Link": "/jobs/area/11/?searchterm=אנליסט&geolexid=537907&isaa=true&ssaen=3&range=3",
+       "Code": 483,
+       "NameInHebrew": "כפר סבא",
+       "GeoLexId": 537907,
+       "IsSelected": false,
+       "RegionIds": [
+        11
+       ],
+       "NameInEnglish": "\tKefar Sava\t"
+      },
+      {
+       "Link": "/jobs/area/10/?searchterm=אנליסט&geolexid=539080&isaa=true&ssaen=3&range=3",
+       "Code": 536,
+       "NameInHebrew": "נתניה",
+       "GeoLexId": 539080,
+       "IsSelected": false,
+       "RegionIds": [
+        10
+       ],
+       "NameInEnglish": "\tNetanya\t"
+      }
+     ],
+     "NumberOfJobs": 247,
+     "NameInEnglish": "Hasharon",
+     "GeoLexId": 539069,
+     "RegionIds": [
+      10,
+      11,
+      12,
+      13,
+      14
+     ],
+     "Link": "/jobs/area/10-11-12-13-14/?searchterm=אנליסט&geolexid=539069&isaa=true&ssaen=3&range=3",
+     "Code": 16,
+     "NameInHebrew": "שרון"
+    }
+   ],
+   "Selected": []
+  },
+  "FilterByExperience": {
+   "Title": {
+    "Key": "ExperienceFilterTitle",
+    "Value": "שנות נסיון"
+   },
+   "QueryParamName": "experience",
+   "Options": [
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 72,
+     "Code": 1,
+     "NameInHebrew": "ללא נסיון"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 163,
+     "Code": 2,
+     "NameInHebrew": "1-2 שנים"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 142,
+     "Code": 3,
+     "NameInHebrew": "3-4 שנים"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 65,
+     "Code": 4,
+     "NameInHebrew": "5-6 שנים"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 7,
+     "Code": 5,
+     "NameInHebrew": "7 שנים ומעלה"
+    }
+   ],
+   "Selected": []
+  },
+  "FilterByScope": {
+   "Title": {
+    "Key": "ScopeFilterTitle",
+    "Value": "היקף משרה"
+   },
+   "QueryParamName": "scope",
+   "Options": [
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 98,
+     "Code": 6,
+     "NameInHebrew": "היברידי"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 14,
+     "Code": 4,
+     "NameInHebrew": "משמרות"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 4,
+     "Code": 3,
+     "NameInHebrew": "משרה זמנית"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 27,
+     "Code": 2,
+     "NameInHebrew": "משרה חלקית"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 431,
+     "Code": 1,
+     "NameInHebrew": "משרה מלאה"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 30,
+     "Code": 5,
+     "NameInHebrew": "עבודה מהבית"
+    }
+   ],
+   "Selected": []
+  },
+  "FilterByCv": {
+   "Title": {
+    "Key": "CvFilterTitle",
+    "Value": "משרה ללא קו\"ח"
+   },
+   "QueryParamName": "cv",
+   "Options": [
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 0,
+     "Code": 2,
+     "NameInHebrew": "הכל"
+    },
+    {
+     "IsSelected": false,
+     "NumberOfJobs": 0,
+     "Code": 1,
+     "NameInHebrew": "ללא קו\"ח"
+    }
+   ],
+   "Selected": []
+  }
+ },
+ "IsSingleSearchTerm": false,
+ "BlockType": null,
+ "JAPUProperties": {
+  "ShowJAPU": false,
+  "JAPUHeader": "",
+  "SubHeader": "",
+  "Categories": {},
+  "Locations": {},
+  "Keywords": []
+ },
+ "SearchProperties": {
+  "WhatFieldText": "אנליסט",
+  "WhereFieldText": "",
+  "Range": {
+   "Code": 3,
+   "NameInHebrew": "30 ק\"מ"
+  },
+  "WhereFieldGeoLex": null,
+  "WhereFieldAreasString": "",
+  "GeoLexIds": [],
+  "AreasList": [],
+  "subcat": [],
+  "stsCategory": null,
+  "catdir": null,
+  "experience": [],
+  "scope": [],
+  "ssaen": 1,
+  "IsSearchTerm": true,
+  "CurrentPageNumber": 0,
+  "IsHitechPage": false,
+  "ShowSeparator": false,
+  "SeparatorText": "הרחבנו את החיפוש שלך לתוצאות נוספות:",
+  "CV": [],
+  "benefit": [],
+  "suitability": []
+ },
+ "HotJobs": [],
+ "RecommendedJobs": [],
+ "TotalSearchResultCount": 449,
+ "TotalPagesNumber": 44,
+ "NextPageNumber": 1,
+ "ResultList": [
+  {
+   "JobAnalytics": {
+    "id": "38870127",
+    "name": "אנליסט/ית מטה - 202823",
+    "price": "5000",
+    "dimension22": "RankA",
+    "brand": "171896",
+    "category": " כספים / שוק ההון",
+    "position": "0",
+    "quantity": 1,
+    "list": null,
+    "dimension15": "Active",
+    "dimension16": "1.5000",
+    "ppcd": "RankA",
+    "dimension17": "10",
+    "dimension18": "449",
+    "paidresult": 0,
+    "dimension19": "1380.00026012333",
+    "metric1": "1.5000",
+    "ppcm": "RankA",
+    "dimension20": "26/10/2026 14:11:48",
+    "dimension21": "06/11/2026 14:57:39",
+    "preferred": true,
+    "TransactionId": "5349D13750",
+    "revenue": 1,
+    "tax": 1,
+    "shipping": 1,
+    "affiliation": "drushim",
+    "label": "אנליסט/ית מטה - 202823",
+    "cd68": "38870127",
+    "cd69": "0"
+   },
+   "SendCVButtonModel": {
+    "Text": "שלח/י קורות חיים",
+    "ExternalLink": "",
+    "ButtonLink": "https://www.drushim.co.il/sendcv.aspx?jobcode=38870127"
+   },
+   "Code": 38870127,
+   "Company": {
+    "Job2Link": false,
+    "CompanyDisplayName": "מגדל ביטוח ופיננסים",
+    "ToUrl": "דרושים-171896-מגדל-חברה-לביטוח/",
+    "CompanyLogoLink": "https://webapi.drushim.co.il/logos/171896/page/638789492527740607.png",
+    "HotJobLogoLink": "https://webapi.drushim.co.il/logos/171896/page/638789492527740607.png",
+    "HotJobBannerLink": "https://webapi.drushim.co.il/logos/171896/hotjob/638676968761704694.png",
+    "Code": 171896,
+    "NameInHebrew": "מגדל ביטוח ופיננסים"
+   },
+   "JobContent": {
+    "Name": "אנליסט/ית מטה",
+    "Filters": [],
+    "Salary": 0,
+    "SalaryRangeText": null,
+    "JobCode": 38870127,
+    "FullName": "אנליסט/ית מטה - 202823",
+    "Scopes": [
+     {
+      "Code": 1,
+      "NameInHebrew": "משרה מלאה"
+     }
+    ],
+    "Regions": [
+     {
+      "Code": 1,
+      "NameInHebrew": "תל אביב"
+     },
+     {
+      "Code": 2,
+      "NameInHebrew": "רמת גן / גבעתיים"
+     },
+     {
+      "Code": 3,
+      "NameInHebrew": "חולון / בת ים"
+     },
+     {
+      "Code": 4,
+      "NameInHebrew": "ראשון לציון"
+     },
+     {
+      "Code": 5,
+      "NameInHebrew": "פתח תקווה"
+     },
+     {
+      "Code": 6,
+      "NameInHebrew": "אור יהודה / יהוד"
+     },
+     {
+      "Code": 7,
+      "NameInHebrew": "לוד / רמלה"
+     },
+     {
+      "Code": 8,
+      "NameInHebrew": "מודיעין"
+     },
+     {
+      "Code": 9,
+      "NameInHebrew": "ראש העין"
+     },
+     {
+      "Code": 10,
+      "NameInHebrew": "נתניה / אבן יהודה"
+     },
+     {
+      "Code": 11,
+      "NameInHebrew": "רעננה / כפר סבא"
+     },
+     {
+      "Code": 12,
+      "NameInHebrew": "הרצליה / רמת השרון"
+     },
+     {
+      "Code": 13,
+      "NameInHebrew": "הוד השרון"
+     },
+     {
+      "Code": 14,
+      "NameInHebrew": "חדרה"
+     }
+    ],
+    "Zones": [
+     {
+      "NameInEnglish": "Center",
+      "GeoLexId": 539071,
+      "RegionIds": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "Link": "/jobs/area/1-2-3-4-5-6-7-8-9/",
+      "Code": 1,
+      "NameInHebrew": "מרכז"
+     },
+     {
+      "NameInEnglish": "Hasharon",
+      "GeoLexId": 539069,
+      "RegionIds": [
+       10,
+       11,
+       12,
+       13,
+       14
+      ],
+      "Link": "/jobs/area/10-11-12-13-14/",
+      "Code": 16,
+      "NameInHebrew": "שרון"
+     }
+    ],
+    "SubCategories": [
+     {
+      "Link": "/jobs/subcat/96/",
+      "Categories": [
+       9
+      ],
+      "Code": 96,
+      "NameInHebrew": "אנליסט/ית"
+     },
+     {
+      "Link": "/jobs/subcat/100/",
+      "Categories": [
+       9
+      ],
+      "Code": 100,
+      "NameInHebrew": "כלכלן/ית"
+     }
+    ],
+    "Categories": [
+     {
+      "Link": "/jobs/cat9/",
+      "Code": 9,
+      "NameInHebrew": "כספים / שוק ההון"
+     }
+    ],
+    "Requirements": "תואר במנהל עסקים או כלכלה – חובה<br/>ניסיון  באנליזה - עדיפות לחברת ביטוח- יתרון <br/>יכולת אנליטית גבוהה וחשיבה עסקית<br/>ידיעת אקסל ברמה גבוהה<br/>יכולת פיתוח וייעול תהליכי דיווח באמצעות EXCEL לרבות נוסחאות מתקדמות, טבלאות צירPower Query וכלי אוטומציה<br/>יסודיות ואחריות<br/>יכולת עבודה מול מגוון ממשקים.",
+    "Description": "- הפקת דוחות מכירה יומיים, שבועיים וחודשיים עבור מנהלים וגורמים עסקיים.<br/>- ניתוח ביצועי מכירות של סוכנים ומנהלים מול יעדים, תקופות קודמות ומגמות פעילות.<br/>- מעקב אחר מדדים עסקיים בתחומי ביטוח חיים, ריסק, בריאות, פנסיה ופיננסים.<br/>- בניית דוחות, כלי בקרה ודשבורדים באקסל להצגת ביצועים, מגמות ופערים.<br/>- ביצוע ניתוחים נקודתיים בהתאם לצורכי המנהלים והיחידות העסקיות.",
+    "Experience": {
+     "Code": 2,
+     "NameInHebrew": "1-2 שנים"
+    },
+    "Addresses": [
+     {
+      "CityId": 482,
+      "City": "פתח תקווה",
+      "CityEnglish": "\tPetah Tikva\t",
+      "GeoLexId": 539128,
+      "Longitude": 34.887762,
+      "Latitude": 32.084041,
+      "RegionIds": [
+       5
+      ]
+     }
+    ],
+    "DeclarationAllGenders": "משרה זו פונה לנשים וגברים כאחד.",
+    "JobBenefits": [],
+    "JobSuitabilities": []
+   },
+   "JobInfo": {
+    "Lang": 1,
+    "JumpDateString": "לפני 23 שעות",
+    "JumpDate": "2026-10-26T14:11:48.853",
+    "CanDisplayLinks": true,
+    "HasFilter": false,
+    "RecommendedStatisticsRowId": 0,
+    "SeekerJobStatus": 0,
+    "G4JobScript": null,
+    "AllowNoCV": false,
+    "Link": "/job/38870127/21961a9e/",
+    "JobCode": 38870127,
+    "Hash": "21961A9E",
+    "EmployerJobCode": "202823",
+    "Date": "2026-10-26T14:11:48.853",
+    "DisplayDate": "2026-11-06T14:57:39.6788722+02:00",
+    "Preferred": true,
+    "TopJob": false,
+    "IsExpired": false,
+    "STSJobCode": 30766447,
+    "Hot": false,
+    "IsClassifiedJob": false,
+    "IsCorona": false,
+    "IsRecommender": false
+   }
+  },
+  {
+   "JobAnalytics": {
+    "id": "38715391",
+    "name": "אנליסט.ית התחזויות - 20280",
+    "price": "5000",
+    "dimension22": "RankA",
+    "brand": "8457",
+    "category": " כספים / שוק ההון, אבטחת מידע",
+    "position": "1",
+    "quantity": 1,
+    "list": null,
+    "dimension15": "Active",
+    "dimension16": "1.5000",
+    "ppcd": "RankA",
+    "dimension17": "10",
+    "dimension18": "449",
+    "paidresult": 0,
+    "dimension19": "60.0002606183333",
+    "metric1": "1.5000",
+    "ppcm": "RankA",
+    "dimension20": "12/10/2026 11:47:09",
+    "dimension21": "07/11/2026 12:57:39",
+    "preferred": true,
+    "TransactionId": "4DA644D90E",
+    "revenue": 1,
+    "tax": 1,
+    "shipping": 1,
+    "affiliation": "drushim",
+    "label": "אנליסט.ית התחזויות - 20280",
+    "cd68": "38715391",
+    "cd69": "1"
+   },
+   "SendCVButtonModel": {
+    "Text": "שלח/י קורות חיים",
+    "ExternalLink": "",
+    "ButtonLink": "https://www.drushim.co.il/sendcv.aspx?jobcode=38715391"
+   },
+   "Code": 38715391,
+   "Company": {
+    "Job2Link": false,
+    "CompanyDisplayName": "מנורה מבטחים בע\"מ",
+    "ToUrl": "דרושים-8457-מנורה-מבטחים/",
+    "CompanyLogoLink": "https://webapi.drushim.co.il/logos/8457/page/639049439875255471.png",
+    "HotJobLogoLink": "https://webapi.drushim.co.il/logos/8457/page/639049439875255471.png",
+    "HotJobBannerLink": "https://webapi.drushim.co.il/logos/8457/hotjob/638351241103292715.png",
+    "Code": 8457,
+    "NameInHebrew": "מנורה מבטחים בע''מ"
+   },
+   "JobContent": {
+    "Name": "אנליסט.ית התחזויות",
+    "Filters": [],
+    "Salary": 0,
+    "SalaryRangeText": null,
+    "JobCode": 38715391,
+    "FullName": "אנליסט.ית התחזויות - 20280",
+    "Scopes": [
+     {
+      "Code": 1,
+      "NameInHebrew": "משרה מלאה"
+     }
+    ],
+    "Regions": [
+     {
+      "Code": 1,
+      "NameInHebrew": "תל אביב"
+     },
+     {
+      "Code": 2,
+      "NameInHebrew": "רמת גן / גבעתיים"
+     },
+     {
+      "Code": 3,
+      "NameInHebrew": "חולון / בת ים"
+     },
+     {
+      "Code": 4,
+      "NameInHebrew": "ראשון לציון"
+     },
+     {
+      "Code": 5,
+      "NameInHebrew": "פתח תקווה"
+     },
+     {
+      "Code": 6,
+      "NameInHebrew": "אור יהודה / יהוד"
+     },
+     {
+      "Code": 7,
+      "NameInHebrew": "לוד / רמלה"
+     },
+     {
+      "Code": 8,
+      "NameInHebrew": "מודיעין"
+     },
+     {
+      "Code": 9,
+      "NameInHebrew": "ראש העין"
+     },
+     {
+      "Code": 10,
+      "NameInHebrew": "נתניה / אבן יהודה"
+     },
+     {
+      "Code": 11,
+      "NameInHebrew": "רעננה / כפר סבא"
+     },
+     {
+      "Code": 12,
+      "NameInHebrew": "הרצליה / רמת השרון"
+     },
+     {
+      "Code": 13,
+      "NameInHebrew": "הוד השרון"
+     },
+     {
+      "Code": 14,
+      "NameInHebrew": "חדרה"
+     },
+     {
+      "Code": 15,
+      "NameInHebrew": "אשדוד / גן יבנה"
+     },
+     {
+      "Code": 16,
+      "NameInHebrew": "רחובות / נס ציונה/ גדרה"
+     },
+     {
+      "Code": 17,
+      "NameInHebrew": "יבנה"
+     }
+    ],
+    "Zones": [
+     {
+      "NameInEnglish": "Center",
+      "GeoLexId": 539071,
+      "RegionIds": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "Link": "/jobs/area/1-2-3-4-5-6-7-8-9/",
+      "Code": 1,
+      "NameInHebrew": "מרכז"
+     },
+     {
+      "NameInEnglish": "Hasharon",
+      "GeoLexId": 539069,
+      "RegionIds": [
+       10,
+       11,
+       12,
+       13,
+       14
+      ],
+      "Link": "/jobs/area/10-11-12-13-14/",
+      "Code": 16,
+      "NameInHebrew": "שרון"
+     },
+     {
+      "NameInEnglish": "Ashfela",
+      "GeoLexId": 539068,
+      "RegionIds": [
+       15,
+       16,
+       17
+      ],
+      "Link": "/jobs/area/15-16-17/",
+      "Code": 17,
+      "NameInHebrew": "שפלה"
+     }
+    ],
+    "SubCategories": [
+     {
+      "Link": "/jobs/subcat/542/",
+      "Categories": [
+       30
+      ],
+      "Code": 542,
+      "NameInHebrew": "אנליסט/ית אבטחת מידע"
+     },
+     {
+      "Link": "/jobs/subcat/96/",
+      "Categories": [
+       9
+      ],
+      "Code": 96,
+      "NameInHebrew": "אנליסט/ית"
+     },
+     {
+      "Link": "/jobs/subcat/456/",
+      "Categories": [
+       9
+      ],
+      "Code": 456,
+      "NameInHebrew": "מנהל/ת סיכונים"
+     },
+     {
+      "Link": "/jobs/subcat/100/",
+      "Categories": [
+       9
+      ],
+      "Code": 100,
+      "NameInHebrew": "כלכלן/ית"
+     }
+    ],
+    "Categories": [
+     {
+      "Link": "/jobs/cat9/",
+      "Code": 9,
+      "NameInHebrew": "כספים / שוק ההון"
+     },
+     {
+      "Link": "/jobs/cat30/",
+      "Code": 30,
+      "NameInHebrew": "אבטחת מידע"
+     }
+    ],
+    "Requirements": "·         תואר ראשון רלוונטי (סטטיסטיקה/כלכלה/ מנע\"ס/הנדסת תעו\"נ) - יתרון<br/>·         ניסיון של 3 שנים לפחות בתפקידי בקרה – חובה למועמד חיצוני.<br/>·         ניסיון באפיון והטמעת בקרות בתהליכי עבודה - חובה<br/>·         יכולת ניתוח והבנת בסיסי נתונים גדולים ומורכבים - חובה<br/>·         שליטה מלאה בexcel - ברמת פונקציות מתקדמות - חובה<br/>·         ידע ותחקור ב SQL - חובה<br/>·         הכרות עם פלטפורמות ניתוח נתונים כגון Cognos, R, spss - יתרון<br/>·         הכרות עם כלי BI כגון Tableau, Click view - יתרון<br/>·         ניסיון בתחקור אירועים עסקיים - יתרון<br/>·         היכרות עם עולם הביטוח – יתרון<br/>·         ארגון, סדר ושיטתיות באיסוף וניתוח המידע<br/>·         אסרטיביות ויכולת לעבוד בארגון גדול<br/>·         יחסי אנוש טובים ויכולת עבודה מול ממשקים",
+    "Description": "דרוש.ה אנליסט.ית התחזויות במחלקת ניהול זהויות וממשל הרשאות.<br/><br/>איתור, ניתוח ומניעה של מקרי התחזות כנגד לקוחות החברה באמצעות בקרות וחקירת פעולות חריגות במערכות.<br/><br/>תחומי אחריות עיקריים-<br/>·         לרבות התווית מדיניות, הגדרת אנומליות, ואפיון תהליכים.<br/>·         ניתוח ומניעה של מקרי התחזות כנגד החברה ולקוחותיה באמצעות איתור וחקירת פעולות חריגות במערכת.<br/>·         הפקת לקחים והטמעת בקרות בכלי ההגנה השונים<br/>·         אחריות על ביצוע בקרות שוטפות, עיבוד נתונים, תחקור מקרים וביצוע ניתוח נתונים לניטור ומניעת הונאות.<br/>·         אחריות על פיתוח ובניית בקרות במערכות החברה<br/><br/>היקף התפקיד-<br/>ממשקי עבודה (פנימיים וחיצוניים) עיקריים:<br/>פנימיים: עובדי מנורה<br/>חיצוניים: ספקים ואינטגרטורים.",
+    "Experience": {
+     "Code": 3,
+     "NameInHebrew": "3-4 שנים"
+    },
+    "Addresses": [
+     {
+      "CityId": 376,
+      "City": "רמת גן",
+      "CityEnglish": "\tRamat Gan\t",
+      "GeoLexId": 539120,
+      "Longitude": 34.824785,
+      "Latitude": 32.068424,
+      "RegionIds": [
+       2
+      ]
+     }
+    ],
+    "DeclarationAllGenders": "משרה זו פונה לנשים וגברים כאחד.",
+    "JobBenefits": [],
+    "JobSuitabilities": []
+   },
+   "JobInfo": {
+    "Lang": 1,
+    "JumpDateString": "לפני 1 שעות",
+    "JumpDate": "2026-10-31T12:52:16.147",
+    "CanDisplayLinks": true,
+    "HasFilter": false,
+    "RecommendedStatisticsRowId": 0,
+    "SeekerJobStatus": 0,
+    "G4JobScript": null,
+    "AllowNoCV": false,
+    "Link": "/job/38715391/f9765225/",
+    "JobCode": 38715391,
+    "Hash": "F9765225",
+    "EmployerJobCode": "20280",
+    "Date": "2026-10-12T11:47:09.027",
+    "DisplayDate": "2026-11-07T12:57:39.6944796+02:00",
+    "Preferred": true,
+    "TopJob": false,
+    "IsExpired": false,
+    "STSJobCode": 30618882,
+    "Hot": false,
+    "IsClassifiedJob": false,
+    "IsCorona": false,
+    "IsRecommender": false
+   }
+  },
+  {
+   "JobAnalytics": {
+    "id": "38956634",
+    "name": "אנליסט/ית אשראי - הכשרה מלאה עלינו!",
+    "price": "5000",
+    "dimension22": "RankD",
+    "brand": "16630",
+    "category": " כספים / שוק ההון",
+    "position": "2",
+    "quantity": 1,
+    "list": null,
+    "dimension15": "Active",
+    "dimension16": "1.5000",
+    "ppcd": "RankD",
+    "dimension17": "10",
+    "dimension18": "449",
+    "paidresult": 0,
+    "dimension19": "120.000260088333",
+    "metric1": "1.5000",
+    "ppcm": "RankD",
+    "dimension20": "02/11/2026 15:13:58",
+    "dimension21": "07/11/2026 11:57:39",
+    "preferred": true,
+    "TransactionId": "F19AA7206D",
+    "revenue": 1,
+    "tax": 1,
+    "shipping": 1,
+    "affiliation": "drushim",
+    "label": "אנליסט/ית אשראי - הכשרה מלאה עלינו!",
+    "cd68": "38956634",
+    "cd69": "2"
+   },
+   "SendCVButtonModel": {
+    "Text": "שלח/י קורות חיים",
+    "ExternalLink": "",
+    "ButtonLink": "https://www.drushim.co.il/sendcv.aspx?jobcode=38956634"
+   },
+   "Code": 38956634,
+   "Company": {
+    "Job2Link": false,
+    "CompanyDisplayName": "דן אנד ברדסטריט",
+    "ToUrl": "דרושים-16630-דן-אנד-ברדסטריט/",
+    "CompanyLogoLink": "https://webapi.drushim.co.il/logos/16630/page/637966933356995496.png",
+    "HotJobLogoLink": "https://webapi.drushim.co.il/logos/16630/page/637966933356995496.png",
+    "HotJobBannerLink": "",
+    "Code": 16630,
+    "NameInHebrew": "דן אנד ברדסטריט"
+   },
+   "JobContent": {
+    "Name": "אנליסט/ית אשראי - הכשרה מלאה עלינו!",
+    "Filters": [],
+    "Salary": 0,
+    "SalaryRangeText": null,
+    "JobCode": 38956634,
+    "FullName": "אנליסט/ית אשראי - הכשרה מלאה עלינו!",
+    "Scopes": [
+     {
+      "Code": 1,
+      "NameInHebrew": "משרה מלאה"
+     }
+    ],
+    "Regions": [
+     {
+      "Code": 1,
+      "NameInHebrew": "תל אביב"
+     },
+     {
+      "Code": 2,
+      "NameInHebrew": "רמת גן / גבעתיים"
+     },
+     {
+      "Code": 3,
+      "NameInHebrew": "חולון / בת ים"
+     },
+     {
+      "Code": 4,
+      "NameInHebrew": "ראשון לציון"
+     },
+     {
+      "Code": 5,
+      "NameInHebrew": "פתח תקווה"
+     },
+     {
+      "Code": 6,
+      "NameInHebrew": "אור יהודה / יהוד"
+     },
+     {
+      "Code": 7,
+      "NameInHebrew": "לוד / רמלה"
+     },
+     {
+      "Code": 8,
+      "NameInHebrew": "מודיעין"
+     },
+     {
+      "Code": 9,
+      "NameInHebrew": "ראש העין"
+     },
+     {
+      "Code": 10,
+      "NameInHebrew": "נתניה / אבן יהודה"
+     },
+     {
+      "Code": 11,
+      "NameInHebrew": "רעננה / כפר סבא"
+     },
+     {
+      "Code": 12,
+      "NameInHebrew": "הרצליה / רמת השרון"
+     },
+     {
+      "Code": 13,
+      "NameInHebrew": "הוד השרון"
+     },
+     {
+      "Code": 14,
+      "NameInHebrew": "חדרה"
+     },
+     {
+      "Code": 15,
+      "NameInHebrew": "אשדוד / גן יבנה"
+     },
+     {
+      "Code": 16,
+      "NameInHebrew": "רחובות / נס ציונה/ גדרה"
+     },
+     {
+      "Code": 17,
+      "NameInHebrew": "יבנה"
+     }
+    ],
+    "Zones": [
+     {
+      "NameInEnglish": "Center",
+      "GeoLexId": 539071,
+      "RegionIds": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "Link": "/jobs/area/1-2-3-4-5-6-7-8-9/",
+      "Code": 1,
+      "NameInHebrew": "מרכז"
+     },
+     {
+      "NameInEnglish": "Hasharon",
+      "GeoLexId": 539069,
+      "RegionIds": [
+       10,
+       11,
+       12,
+       13,
+       14
+      ],
+      "Link": "/jobs/area/10-11-12-13-14/",
+      "Code": 16,
+      "NameInHebrew": "שרון"
+     },
+     {
+      "NameInEnglish": "Ashfela",
+      "GeoLexId": 539068,
+      "RegionIds": [
+       15,
+       16,
+       17
+      ],
+      "Link": "/jobs/area/15-16-17/",
+      "Code": 17,
+      "NameInHebrew": "שפלה"
+     }
+    ],
+    "SubCategories": [
+     {
+      "Link": "/jobs/subcat/96/",
+      "Categories": [
+       9
+      ],
+      "Code": 96,
+      "NameInHebrew": "אנליסט/ית"
+     },
+     {
+      "Link": "/jobs/subcat/97/",
+      "Categories": [
+       9
+      ],
+      "Code": 97,
+      "NameInHebrew": "בנקאות כללי"
+     }
+    ],
+    "Categories": [
+     {
+      "Link": "/jobs/cat9/",
+      "Code": 9,
+      "NameInHebrew": "כספים / שוק ההון"
+     }
+    ],
+    "Requirements": "תואר ראשון בכלכלה/מנהל עסקים - חובה!<br/>כושר ביטוי בע\"פ ובכתב<br/>יכולת אנליטית, עמידה בלחץ<br/>זמינות למשרה מלאה - אפשרות לעבודה היברידית!<br/>זמינות למשרה מלאה",
+    "Description": "סיימת תואר בכלכלה או במנהל עסקים? זאת ההזדמנות שלך להיכנס לעולם הפיננסי!<br/>לחברת Dun & Bradstreet, מהמובילות בעולם בתחום המידע העסקי, <br/>דרוש/ה אנליסט/ית אשראי לתפקיד התחלתי, ללא ניסיון קודם!<br/>זו ההזדמנות שלך להשתלב בחברה בינלאומית מובילה, ללמוד את עולם ניתוח האשראי והסיכונים העסקיים ולרכוש ניסיון מקצועי משמעותי כבר בתחילת הדרך.<br/><br/>מה כולל התפקיד?<br/>-ניתוח חברות ועסקים במשק הישראלי והערכת רמת הסיכון שלהם.<br/>-בחינת מסמכים פיננסיים, קשרים עסקיים וגורמי סיכון.<br/>-שיחות מקצועיות עם מנהלים בכירים.<br/><br/>משרה מלאה | משרדי החברה במגדלי LIFE, בני ברק <br/>המשרה פונה לנשים וגברים כאחד.",
+    "Experience": {
+     "Code": 1,
+     "NameInHebrew": "ללא נסיון"
+    },
+    "Addresses": [
+     {
+      "CityId": 375,
+      "City": "בני ברק",
+      "CityEnglish": "\tBnei Brak\t",
+      "GeoLexId": 539119,
+      "Longitude": 34.835226,
+      "Latitude": 32.084932,
+      "RegionIds": [
+       2
+      ]
+     }
+    ],
+    "DeclarationAllGenders": "משרה זו פונה לנשים וגברים כאחד.",
+    "JobBenefits": [],
+    "JobSuitabilities": []
+   },
+   "JobInfo": {
+    "Lang": 1,
+    "JumpDateString": "לפני 2 שעות",
+    "JumpDate": "2026-11-05T11:55:21.027",
+    "CanDisplayLinks": true,
+    "HasFilter": false,
+    "RecommendedStatisticsRowId": 0,
+    "SeekerJobStatus": 0,
+    "G4JobScript": null,
+    "AllowNoCV": false,
+    "Link": "/job/38956634/bf9ed041/",
+    "JobCode": 38956634,
+    "Hash": "BF9ED041",
+    "EmployerJobCode": "",
+    "Date": "2026-11-02T15:13:58.963",
+    "DisplayDate": "2026-11-07T11:57:39.7101167+02:00",
+    "Preferred": true,
+    "TopJob": false,
+    "IsExpired": false,
+    "STSJobCode": 30864149,
+    "Hot": false,
+    "IsClassifiedJob": false,
+    "IsCorona": false,
+    "IsRecommender": false
+   }
+  },
+  {
+   "JobAnalytics": {
+    "id": "38755139",
+    "name": "כלכלנ/ית- אנליסטי/ת לחברה בינלאומית מובילה! - JB-312",
+    "price": "5000",
+    "dimension22": "RankC",
+    "brand": "22191",
+    "category": " כספים / שוק ההון",
+    "position": "5",
+    "quantity": 1,
+    "list": null,
+    "dimension15": "Active",
+    "dimension16": "1.5000",
+    "ppcd": "RankC",
+    "dimension17": "10",
+    "dimension18": "449",
+    "paidresult": 0,
+    "dimension19": "120.000259776667",
+    "metric1": "1.5000",
+    "ppcm": "RankC",
+    "dimension20": "15/10/2026 10:46:35",
+    "dimension21": "07/11/2026 11:57:39",
+    "preferred": true,
+    "TransactionId": "71E1AB9F9E",
+    "revenue": 1,
+    "tax": 1,
+    "shipping": 1,
+    "affiliation": "drushim",
+    "label": "כלכלנ/ית- אנליסטי/ת לחברה בינלאומית מובילה! - JB-312",
+    "cd68": "38755139",
+    "cd69": "5"
+   },
+   "SendCVButtonModel": {
+    "Text": "שלח/י קורות חיים",
+    "ExternalLink": "",
+    "ButtonLink": "https://www.drushim.co.il/sendcv.aspx?jobcode=38755139"
+   },
+   "Code": 38755139,
+   "Company": {
+    "Job2Link": false,
+    "CompanyDisplayName": "Flex",
+    "ToUrl": "דרושים-22191-flextronics/",
+    "CompanyLogoLink": "https://webapi.drushim.co.il/logos/22191/page/637108960178464834.png",
+    "HotJobLogoLink": "https://webapi.drushim.co.il/logos/22191/page/637108960178464834.png",
+    "HotJobBannerLink": "https://webapi.drushim.co.il/logos/22191/hotjob/637534878336780796.png",
+    "Code": 22191,
+    "NameInHebrew": "Flex"
+   },
+   "JobContent": {
+    "Name": "כלכלנ/ית- אנליסטי/ת לחברה בינלאומית מובילה!",
+    "Filters": [],
+    "Salary": 0,
+    "SalaryRangeText": null,
+    "JobCode": 38755139,
+    "FullName": "כלכלנ/ית- אנליסטי/ת לחברה בינלאומית מובילה! - JB-312",
+    "Scopes": [
+     {
+      "Code": 1,
+      "NameInHebrew": "משרה מלאה"
+     }
+    ],
+    "Regions": [
+     {
+      "Code": 21,
+      "NameInHebrew": "חיפה"
+     },
+     {
+      "Code": 22,
+      "NameInHebrew": "קריות"
+     },
+     {
+      "Code": 23,
+      "NameInHebrew": "עכו / נהריה"
+     },
+     {
+      "Code": 24,
+      "NameInHebrew": "גליל / גולן"
+     },
+     {
+      "Code": 25,
+      "NameInHebrew": "טבריה"
+     },
+     {
+      "Code": 26,
+      "NameInHebrew": "עפולה / נצרת"
+     },
+     {
+      "Code": 27,
+      "NameInHebrew": "יקנעם / רמת ישי"
+     },
+     {
+      "Code": 28,
+      "NameInHebrew": "זכרון יעקב / בנימינה"
+     },
+     {
+      "Code": 29,
+      "NameInHebrew": "פרדס חנה כרכור"
+     }
+    ],
+    "Zones": [
+     {
+      "NameInEnglish": "North",
+      "GeoLexId": 537903,
+      "RegionIds": [
+       21,
+       22,
+       23,
+       24,
+       25,
+       26,
+       27,
+       28,
+       29
+      ],
+      "Link": "/jobs/area/21-22-23-24-25-26-27-28-29/",
+      "Code": 3,
+      "NameInHebrew": "צפון"
+     }
+    ],
+    "SubCategories": [
+     {
+      "Link": "/jobs/subcat/100/",
+      "Categories": [
+       9
+      ],
+      "Code": 100,
+      "NameInHebrew": "כלכלן/ית"
+     },
+     {
+      "Link": "/jobs/subcat/96/",
+      "Categories": [
+       9
+      ],
+      "Code": 96,
+      "NameInHebrew": "אנליסט/ית"
+     },
+     {
+      "Link": "/jobs/subcat/455/",
+      "Categories": [
+       9
+      ],
+      "Code": 455,
+      "NameInHebrew": "מנהל/ת כספים"
+     }
+    ],
+    "Categories": [
+     {
+      "Link": "/jobs/cat9/",
+      "Code": 9,
+      "NameInHebrew": "כספים / שוק ההון"
+     }
+    ],
+    "Requirements": "*תואר ראשון בכלכלה, מנהל עסקים, חשבונאות, תעשייה וניהול או תחום פיננסי רלוונטי<br/>*ניסיון קודם בתפקידי FP&A אנליזה פיננסית, בקרה תקציבית או Business Partnering בארגון יצרני ו/או גלובלי<br/>*ניסיון בבניית תחזיות, תכנון תקציבי וניתוח P&L<br/>*ניסיון בניהול וניתוח OPEX, CAPEX, Payroll וHeadcount<br/>*שליטה גבוהה מאוד ב-Excel ובבניית מודלים פיננסיים<br/>*יכולת הכנת מצגות הנהלה ודוחות ניהוליים ברמה גבוהה<br/>*אנגלית ברמה גבוהה מאוד<br/>*יכולת עבודה מול ממשקים מרובים בארץ ובחו\"ל<br/><br/>יתרונות משמעותיים:<br/>* ניסיון בסביבת ייצור, תעשייה או אלקטרוניקה<br/>* היכרות עם מערכת ERP, BAAN ומערכות תפעוליות פיננסיות<br/>* ניסיון בניתוח שונות ייצור, PPV, Costing או Customer Profitability <br/>* ניסיון בתהליכי Quote vs Actual ו- NPI<br/>* היכרות עם עולמות Lean , שיפור תהליכים ואוטומציה<br/><br/>מיומנויות<br/>יכולת סדר וארגון ברמה גבוהה, יכולת עמידה בלחץ, דייקנות וירידה לפרטים וראש גדול<br/><br/>מה תקבלו אצלנו?<br/>*סביבת עבודה חדשנית דינמית ומתקדמת בחברה גלובלית<br/>*הזדמנות להוביל תהליכי שיפור, אוטומציה וייעול עסקי<br/>*תנאים סוציאלים מצוינים למתאימים/ות <br/>*אופציות קידום ופיתוח נרחבות<br/> *מיקום המשרה: מגדל העמק<br/> התפקיד מיועד לנשים וגברים כאחד.",
+    "Description": "חברת FLEX העולמית מגייסת כלכלנ/ית בכיר לצוות הפיננסי!<br/>אנו מחפשים כלכלנ/ית מקצועי/ת עם יכולות אנליטיות גבוהות, ראייה מערכתית ויכולת לעבוד מול ממשקים מרובים בארץ ובעולם.<br/>במסגרת התפקיד תבצעו ניתוח פיננסי ותפעולי מעמיק, בניית תחזיות ותרחישים עסקיים, עבודה צמודה מול הנהלת האתר וממשקים גלובליים לצד הובלת תהליכי שיפור, אוטומציה ובקרה פיננסית.<br/><br/>מהות התפקיד:<br/>*ביצוע ניתוחים פיננסיים ותפעוליים ותמיכה בתהליכי סגירת חודש<br/>*הכנת תחזיות, בניית מודלים פיננסיים ותרחישי What-If <br/>*ניתוח רווחיות לקוחות, מוצרים ופרויקטים לצד זיהוי סיכונים והזדמנויות עסקיות<br/>*בקרה על תקציבי OPEX ו-CAPEX, ניתוח סטיות ומעקב אחר ביצועים<br/>*הכנת דוחות ניהוליים, מצגות ותובנות עסקיות להנהלה<br/>*עבודה שוטפת מול ממשקים מגוונים, כולל הנהלה, תפעול, שרשרת אספקה וצוותים גלובליים<br/>*הובלת יוזמות לשיפור תהליכים, אוטומציה וייעול תהליכים פיננסיים",
+    "Experience": {
+     "Code": 4,
+     "NameInHebrew": "5-6 שנים"
+    },
+    "Addresses": [
+     {
+      "CityId": 690,
+      "City": "חיפה",
+      "CityEnglish": "\tHaifa\t",
+      "GeoLexId": 539095,
+      "Longitude": 34.989571,
+      "Latitude": 32.7940463,
+      "RegionIds": [
+       21
+      ]
+     },
+     {
+      "CityId": 691,
+      "City": "קריית אתא",
+      "CityEnglish": "\tKiryat Ata\t",
+      "GeoLexId": 539593,
+      "Longitude": 35.119773,
+      "Latitude": 32.809144,
+      "RegionIds": [
+       21
+      ]
+     },
+     {
+      "CityId": 753,
+      "City": "נוף הגליל",
+      "CityEnglish": "\tNof Hagalil\t",
+      "GeoLexId": 539132,
+      "Longitude": 35.324812,
+      "Latitude": 32.711539,
+      "RegionIds": [
+       26
+      ]
+     },
+     {
+      "CityId": 770,
+      "City": "כרמיאל",
+      "CityEnglish": "\tKarmiel\t",
+      "GeoLexId": 539079,
+      "Longitude": 35.292417,
+      "Latitude": 32.914671,
+      "RegionIds": [
+       23
+      ]
+     },
+     {
+      "CityId": 898,
+      "City": "עפולה",
+      "CityEnglish": "\tAfula\t",
+      "GeoLexId": 539081,
+      "Longitude": 35.287922,
+      "Latitude": 32.6104931,
+      "RegionIds": [
+       26
+      ]
+     },
+     {
+      "CityId": 899,
+      "City": "מגדל העמק",
+      "CityEnglish": "\tMigdal HaEmek\t",
+      "GeoLexId": 539101,
+      "Longitude": 35.2417497,
+      "Latitude": 32.6778114,
+      "RegionIds": [
+       26
+      ]
+     },
+     {
+      "CityId": 900,
+      "City": "יקנעם עילית",
+      "CityEnglish": "\tYokneam Illit\t",
+      "GeoLexId": 539090,
+      "Longitude": 35.104606,
+      "Latitude": 32.660225,
+      "RegionIds": [
+       27
+      ]
+     },
+     {
+      "CityId": 905,
+      "City": "רמת ישי",
+      "CityEnglish": "\tRamat Yishai\t",
+      "GeoLexId": 539134,
+      "Longitude": 35.166003,
+      "Latitude": 32.704029,
+      "RegionIds": [
+       27
+      ]
+     },
+     {
+      "CityId": 1014,
+      "City": "טבריה",
+      "CityEnglish": "\tTiberias\t",
+      "GeoLexId": 537904,
+      "Longitude": 35.53524,
+      "Latitude": 32.794281,
+      "RegionIds": [
+       25
+      ]
+     }
+    ],
+    "DeclarationAllGenders": "משרה זו פונה לנשים וגברים כאחד.",
+    "JobBenefits": [],
+    "JobSuitabilities": []
+   },
+   "JobInfo": {
+    "Lang": 1,
+    "JumpDateString": "לפני 2 שעות",
+    "JumpDate": "2026-11-03T11:50:06.887",
+    "CanDisplayLinks": true,
+    "HasFilter": false,
+    "RecommendedStatisticsRowId": 0,
+    "SeekerJobStatus": 0,
+    "G4JobScript": null,
+    "AllowNoCV": false,
+    "Link": "/job/38755139/cb6e6b1a/",
+    "JobCode": 38755139,
+    "Hash": "CB6E6B1A",
+    "EmployerJobCode": "JB-312",
+    "Date": "2026-10-15T10:46:35.893",
+    "DisplayDate": "2026-11-07T11:57:39.7413881+02:00",
+    "Preferred": true,
+    "TopJob": false,
+    "IsExpired": false,
+    "STSJobCode": 30657514,
+    "Hot": false,
+    "IsClassifiedJob": false,
+    "IsCorona": false,
+    "IsRecommender": false
+   }
+  }
+ ],
+ "Count": 25,
+ "IsRedirect": false,
+ "RedirectTo": "",
+ "IsError": false,
+ "Data": null,
+ "Errors": {},
+ "ErrorsMessages": {},
+ "SSAEvents": [],
+ "SEO": {
+  "MetaDataItems": [
+   {
+    "name": "author",
+    "content": "דרושים IL",
+    "hid": "author",
+    "property": ""
+   },
+   {
+    "name": "copyright",
+    "content": "דרושים IL, 2014",
+    "hid": "COPYRIGHT",
+    "property": ""
+   },
+   {
+    "name": "Author",
+    "content": "דרושים - https://www.drushim.co.il/",
+    "hid": "AUTHOR",
+    "property": ""
+   },
+   {
+    "name": "Generator",
+    "content": "דרושים - https://www.drushim.co.il/",
+    "hid": "GENERATOR",
+    "property": ""
+   },
+   {
+    "name": "keywords",
+    "content": "דרושים, אתר דרושים, עבודה, חיפוש עבודה, משרות",
+    "hid": "KEYWORDS",
+    "property": "keywords"
+   },
+   {
+    "name": "description",
+    "content": "מחפשים עבודה אנליסט? כל המשרות הפנויות והצעות העבודה הכי שוות מחכות לכם באתר דרושים. היכנסו עכשיו ושלחו קורות חיים בקליק!",
+    "hid": "DESCRIPTION",
+    "property": "description"
+   },
+   {
+    "name": "ROBOTS",
+    "content": "INDEX, FOLLOW",
+    "hid": "ROBOTS",
+    "property": ""
+   },
+   {
+    "name": "og:url",
+    "content": "https://www.drushim.co.il/jobs/search/%D7%90%D7%A0%D7%9C%D7%99%D7%A1%D7%98/",
+    "hid": "",
+    "property": "og:url"
+   },
+   {
+    "name": "og:title",
+    "content": "אנליסט-מצאנו 449 הצעות עבודה חדשות | דרושים IL",
+    "hid": "OG:TITLE",
+    "property": "og:title"
+   },
+   {
+    "name": "og:type",
+    "content": "article",
+    "hid": "OG:TYPE",
+    "property": "og:type"
+   },
+   {
+    "name": "og:description",
+    "content": "מחפש את המשרה הבאה שלך באנליסט? כל המשרות הכי שוות מתעדכנות באתר דרושים מידי יום. אל תפספס/י את ההזדמנות שלך- הגש/י מועמדות בקליק!",
+    "hid": "OG:DESCRIPTION",
+    "property": "og:description"
+   },
+   {
+    "name": "og:site_name",
+    "content": "drushim",
+    "hid": "og:site_name",
+    "property": "og:site_name"
+   },
+   {
+    "name": "og:image",
+    "content": "https://www.drushim.co.il/Images/portal_thumbnail.png",
+    "hid": "",
+    "property": "og:image"
+   }
+  ],
+  "CategoryDescription": "",
+  "SearchHeader": "דרושים אנליסט: מצאנו 449 הצעות עבודה חדשות עבורך",
+  "title": "דרושים אנליסט | משרות חדשות מתעדכנות כל יום | דרושים IL",
+  "BreadCrumbs": {
+   "Keys": [
+    {
+     "KeyValue": {
+      "Key": "Home",
+      "Value": "דרושים"
+     },
+     "Link": "/",
+     "IsRelative": true
+    },
+    {
+     "KeyValue": {
+      "Key": "SearchTerm",
+      "Value": "'אנליסט'"
+     },
+     "Link": "https://www.drushim.co.il/jobs/search/%d7%90%d7%a0%d7%9c%d7%99%d7%a1%d7%98/",
+     "IsRelative": false
+    }
+   ]
+  },
+  "CanonicalUrl": "https://www.drushim.co.il/jobs/search/%d7%90%d7%a0%d7%9c%d7%99%d7%a1%d7%98/",
+  "ArticleSchemaScript": null,
+  "ArticleFaQSchemaScript": null
+ }
+}

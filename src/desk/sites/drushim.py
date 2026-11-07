@@ -4,60 +4,78 @@ It overlaps AllJobs heavily, which is the point: the resolver collapses the
 same role arriving from both, and a role that only one board carries is the
 reason to read both.
 
-What is different here, and what it cost to find out:
+**It returned nothing from August to November 2026, and said nothing.** The
+site was rebuilt as a Next.js app. Every search URL went on answering 200, the
+old card selector matched nothing, and each daily run reported zero postings as
+a clean run. That is why `crawl` now fails loudly when a whole run parses zero
+postings — see the bottom of this file.
 
-**Pagination is in the path, not in a parameter.** `?page=2` returns page one
-again — quietly, with a 200 and a full page of results. Nothing about the
-response says the parameter was ignored, so a crawler that trusted it would
-fetch the same twenty-five listings twenty times and report a clean run. The
-working shape is `/jobs/search/<term>/2/`, and a test pins it.
+What was measured on 2026-11-07, and what it cost to find out:
 
-**The page is server-rendered, and that is the only reason this works.** The
-site is a Nuxt application and it carries its full state as a minified script
-at the bottom, richer than the HTML — but that payload is an expression with
-substituted variables, not JSON, and parsing it would mean evaluating
-JavaScript. The rendered markup carries every field needed, so it is what is
-read.
+**The data comes from the site's own JSON API, the one its search page calls.**
+`https://webapi.drushim.co.il/api/jobs/search?SearchTerm=<term>&ssaen=1&isAA=true`
+(found in the page's `/_next/static` chunks: `getSearchJobs` →
+`GET /api/jobs/search` on the `webapi` host). Plain GET, no login, no token, no
+cookie; the site's robots.txt disallows only the `area=` form of this path,
+which is not used here. The search page itself does still server-render page
+one — the jobs sit in `__NEXT_DATA__` → `dehydratedState` → the
+`search-results` query — but it renders page one only, so the API is read for
+every page rather than mixing two sources.
 
-**No VIP split.** Unlike AllJobs, every card here is applicable, so nothing is
-dropped. That is asserted rather than assumed: if the board grows a closed
-tier, the fixture test that counts what came back starts failing.
+**Pagination is a parameter again, and an uneven one.** No `page` gives the
+first 25 results; `page=1, 2, …` give 10 each, continuing after those 25 with
+no overlap (449 results for "אנליסט": 25 + 42 × 10 + 4). The old path form
+`/jobs/search/<term>/2/` is now a 404, and `?page=` on the HTML page is
+ignored. Past the end the API returns an empty list, which ends the term.
 
-**A bonus field.** Each card states the experience it wants — "ללא נסיון",
-"שנה", "3 שנים" — as its own element, next to the location. The seniority
-gate in session 5 reads that directly instead of inferring it from prose.
+**The fetcher hands back HTML, not JSON.** `HttpFetcher` returns Scrapling's
+`html_content`, which wraps the body in `<html><body>…</body></html>`, escapes
+`&` as `&amp;`, turns the `<br/>` inside descriptions into `<br>`, and — the
+lossy part — decodes the `&quot;` some adverts carry into a bare `"` that ends
+the JSON string early (2 of 173 pages on the first live run). `_load` undoes
+exactly that and nothing more; a page it still cannot read is an error on the
+run. Raw JSON (the fixture) is read as is. The clean fix is a fetcher method
+that returns the response body untouched, which belongs in `http.py`.
+
+**The id is the old one.** The site has two codes per job. `Code` is in the
+URL (`/job/38870127/…`); `JobInfo.STSJobCode` (30766447) is what the old cards
+carried as `listingid` and what every stored drushim row is keyed by. Keeping
+it keeps the store's history, applications and duplicates attached.
+
+**The date is the bump, as before.** `JumpDateString` ("לפני 23 שעות") is the
+age the board displays, and it is what `posted_raw` always held. `JumpDate`
+is the original publication, often weeks older: a refreshed listing reads as
+fresh, exactly as it did on the old cards.
+
+**No match is not a match.** When a term finds nothing the site shows
+`RecommendedJobs` instead; those are counted as skipped, never kept.
+`ExtentionResultList` (the site's own widened search) is kept, as the page
+shows it in the list.
+
+**No VIP split.** Unlike AllJobs, every listing here is applicable, so nothing
+is dropped. Expired listings, should the API ever return one, are skipped and
+counted.
+
+**A bonus field.** Each listing states the experience it wants — "ללא נסיון",
+"1-2 שנים", "7 שנים ומעלה" — as its own field. The seniority gate reads that
+directly instead of inferring it from prose.
 """
 
 from __future__ import annotations
 
+import html
+import json
 import re
 from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from . import http
 from .base import Fetcher, RawPosting, SiteResult, crawl_terms, search_terms
 from .dates import parse_date
 
 SITE = "drushim"
 BASE_URL = "https://www.drushim.co.il"
-SEARCH = BASE_URL + "/jobs/search/{term}/"
-
-CARD = "div.job-item"
-
-FIELDS: dict[str, tuple[str, ...]] = {
-    "id": ("div[listingid]",),
-    "title": ("span.job-url", "h3 span"),
-    "company": (".job-details-top .bidi", "a.black--text span"),
-    "date": ("span.display-18.inline-flex",),
-    "link": ("a[href^='/job/']",),
-    "arrangement": (".region-item span", ".region-item"),
-}
-
-# Location and required experience sit in the same strip, separated by pipes,
-# with no class of their own to grab. Reading the strip and splitting it is
-# steadier than depending on sibling order in a generated layout.
-DETAILS_STRIP = ".job-details-sub"
+API = "https://webapi.drushim.co.il/api/jobs/search?SearchTerm={term}&ssaen=1&isAA=true"
 
 # The range alternative comes first on purpose. Without it "3-5 שנים" matched
 # only its tail, "5 שנים", and the stored field said the board demanded five
@@ -69,111 +87,182 @@ _EXPERIENCE = re.compile(
     r"(ללא נסיון|ללא ניסיון|\d+\s*[-–—]\s*\d+\s*(?:שנים|שנה)|\d+\s*(?:שנים|שנה))"
 )
 
-
-def _first(card: Any, selectors: tuple[str, ...]) -> Any:
-    for selector in selectors:
-        found = card.css(selector)
-        if found:
-            return found[0]
-    return None
+_WRAPPER = re.compile(r"^\s*<html><body>(.*)</body></html>\s*$", re.S)
+_BREAK = re.compile(r"<br\s*/?>", re.I)
+_TAG = re.compile(r"<[^>]+>")
 
 
-def _text(card: Any, selectors: tuple[str, ...]) -> str:
-    node = _first(card, selectors)
-    if node is None:
-        return ""
-    return " ".join(str(node.get_all_text()).split())
+_VALUE_START = set('"{[-0123456789tfn')
 
 
-def _details(card: Any) -> tuple[str, str]:
-    """Location and required experience, out of the pipe-separated strip."""
-    strip = _first(card, (DETAILS_STRIP,))
-    if strip is None:
-        return "", ""
-
-    parts = [" ".join(part.split()) for part in str(strip.get_all_text()).split("|")]
-    parts = [part for part in parts if part]
-    if not parts:
-        return "", ""
-
-    experience = ""
-    for part in parts:
-        match = _EXPERIENCE.search(part)
-        if match:
-            experience = match.group(1)
-            break
-    return parts[0], experience
+def _closes(text: str, j: int) -> bool:
+    """Whether a quote just before `j` can end a JSON string: what follows it
+    must be structure, and a `,` or `:` must itself be followed by a value."""
+    n = len(text)
+    while j < n and text[j].isspace():
+        j += 1
+    if j >= n or text[j] in "}]":
+        return True
+    if text[j] not in ",:":
+        return False
+    j += 1
+    while j < n and text[j].isspace():
+        j += 1
+    return j < n and text[j] in _VALUE_START
 
 
-def parse(html: str, *, now: datetime) -> dict[str, Any]:
+def _escape_stray_quotes(text: str) -> str:
+    """Escape every quote inside a JSON string that cannot be its end.
+
+    Adverts carry `&quot;` inside JSON strings ("גו&quot;ח"). The HTML parser
+    behind the fetcher decodes that to a bare `"`, which would end the string
+    early. Only that is repaired; anything it gets wrong still fails to decode,
+    so a page this cannot read is an error on the run and never a silent zero.
+    """
+    out: list[str] = []
+    in_string = False
+    i, n = 0, len(text)
+    while i < n:
+        char = text[i]
+        if in_string and char == "\\":
+            out.append(text[i : i + 2])
+            i += 2
+            continue
+        if char == '"':
+            if not in_string:
+                in_string = True
+                out.append(char)
+            elif _closes(text, i + 1):
+                in_string = False
+                out.append(char)
+            else:
+                out.append('\\"')
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
+
+
+def _decode(text: str, *, repair: bool) -> Any:
+    try:
+        return json.loads(text, strict=False)
+    except json.JSONDecodeError:
+        if not repair:
+            raise
+    return json.loads(_escape_stray_quotes(text), strict=False)
+
+
+def _load(text: str) -> dict[str, Any]:
+    """The API's JSON, from either the raw body or Scrapling's HTML wrapping of it."""
+    wrapped = _WRAPPER.match(text)
+    if wrapped:
+        text = html.unescape(wrapped.group(1))
+    try:
+        data = _decode(text, repair=bool(wrapped))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"not the search API's JSON ({exc}); starts {text[:80]!r}") from exc
+    if not isinstance(data, dict) or "ResultList" not in data:
+        raise ValueError("JSON without a ResultList — the API's shape changed")
+    if data.get("IsError"):
+        raise ValueError(f"the API reported an error: {data.get('ErrorsMessages')}")
+    return data
+
+
+def _plain(value: Any) -> str:
+    """Advert HTML to one line of text. Line breaks become spaces, not nothing,
+    or the last word of one line runs into the first word of the next."""
+    text = _BREAK.sub(" ", str(value or ""))
+    return " ".join(_TAG.sub(" ", html.unescape(text)).split())
+
+
+def _experience(value: str) -> str:
+    match = _EXPERIENCE.search(value)
+    return match.group(1) if match else ""
+
+
+def _posting(job: dict[str, Any], *, now: datetime, missing: dict[str, int]) -> RawPosting | None:
+    info = job.get("JobInfo") or {}
+    content = job.get("JobContent") or {}
+    company = job.get("Company") or {}
+
+    external_id = str(info.get("STSJobCode") or "")
+    if not external_id:
+        return None
+
+    raw_date = str(info.get("JumpDateString") or "")
+    posted_at, parsed = parse_date(raw_date, now=now)
+    if not parsed:
+        missing["posted_at"] = missing.get("posted_at", 0) + 1
+
+    # The first city only. Location is part of the fingerprint, and a listing
+    # posted to nine northern cities is still one role; joining them all would
+    # make it a different role from the same listing seen anywhere else.
+    cities = [str(a.get("City", "")).strip() for a in content.get("Addresses") or []]
+    if not any(cities):
+        cities = [str(r.get("NameInHebrew", "")).strip() for r in content.get("Regions") or []]
+    location = next((c for c in cities if c), "")
+
+    title = " ".join(str(content.get("Name") or "").split())
+    company_name = " ".join(
+        str(company.get("CompanyDisplayName") or company.get("NameInHebrew") or "").split()
+    )
+    for name, value in (("title", title), ("company", company_name), ("location", location)):
+        if not value:
+            missing[name] = missing.get(name, 0) + 1
+
+    description = _plain(content.get("Description"))
+    requirements = _plain(content.get("Requirements"))
+    body = description + (f"\nדרישות: {requirements}" if requirements else "")
+
+    link = str(info.get("Link") or "")
+    return RawPosting(
+        site=SITE,
+        external_id=external_id,
+        title=title,
+        company=company_name,
+        location=location,
+        url=BASE_URL + link if link.startswith("/") else link,
+        body=body,
+        posted_at=posted_at,
+        posted_raw=raw_date,
+        work_arrangement=", ".join(
+            str(s.get("NameInHebrew", "")) for s in content.get("Scopes") or []
+        ),
+        stated_experience=_experience(
+            str((content.get("Experience") or {}).get("NameInHebrew") or "")
+        ),
+    )
+
+
+def parse(text: str, *, now: datetime) -> dict[str, Any]:
     """Pure. No network, no store, no clock of its own — hence testable."""
-    page = http.selector(html)
+    data = _load(text)
     postings: list[RawPosting] = []
     skipped: dict[str, int] = {}
     missing: dict[str, int] = {}
 
-    for card in page.css(CARD):
-        holder = _first(card, FIELDS["id"])
-        external_id = str(holder.attrib.get("listingid", "")) if holder is not None else ""
-        if not external_id:
+    jobs = list(data.get("ResultList") or []) + list(data.get("ExtentionResultList") or [])
+    if not jobs and data.get("RecommendedJobs"):
+        skipped["recommended in place of a match"] = len(data["RecommendedJobs"])
+
+    for job in jobs:
+        if (job.get("JobInfo") or {}).get("IsExpired"):
+            skipped["expired"] = skipped.get("expired", 0) + 1
+            continue
+        posting = _posting(job, now=now, missing=missing)
+        if posting is None:
             skipped["no id"] = skipped.get("no id", 0) + 1
             continue
-
-        link = _first(card, FIELDS["link"])
-        href = str(link.attrib.get("href", "")) if link is not None else ""
-
-        raw_date = _text(card, FIELDS["date"])
-        posted_at, parsed = parse_date(raw_date, now=now)
-        if not parsed:
-            missing["posted_at"] = missing.get("posted_at", 0) + 1
-
-        title = _text(card, FIELDS["title"])
-        company = _text(card, FIELDS["company"])
-        location, experience = _details(card)
-        for name, value in (("title", title), ("company", company), ("location", location)):
-            if not value:
-                missing[name] = missing.get(name, 0) + 1
-
-        postings.append(
-            RawPosting(
-                site=SITE,
-                external_id=external_id,
-                title=title,
-                company=company,
-                location=location,
-                url=BASE_URL + href if href.startswith("/") else href,
-                body=_body(card),
-                posted_at=posted_at,
-                posted_raw=raw_date,
-                work_arrangement=_text(card, FIELDS["arrangement"]),
-                stated_experience=experience,
-            )
-        )
+        postings.append(posting)
 
     return {"postings": postings, "skipped": skipped, "missing": missing}
 
 
-def _body(card: Any) -> str:
-    """The description. The company name sits in a paragraph too, so the
-    company's own block is excluded by class rather than by position."""
-    blocks = [
-        block
-        for block in card.css("p.view-on-submit")
-        if "display-22" not in str(block.attrib.get("class", ""))
-    ]
-    if not blocks:
-        return ""
-    return " ".join(str(blocks[0].get_all_text()).split())
-
-
 def url_for(term: str, page: int, _variant: Any = "") -> str:
-    """Page one is the bare path; every later page appends its number.
-
-    `?page=` is accepted by the server and silently ignored, which is the
-    failure mode this shape exists to avoid.
-    """
-    url = SEARCH.format(term=quote(term))
-    return url if page <= 1 else f"{url}{page}/"
+    """Crawler page 1 is the API's unnumbered first page (25 results); crawler
+    page n is the API's `page=n-1` (10 results each, continuing after those 25)."""
+    url = API.format(term=quote(term))
+    return url if page <= 1 else f"{url}&page={page - 1}"
 
 
 def crawl(
@@ -189,13 +278,33 @@ def crawl(
     if max_age_days is None:
         max_age_days = int(spec["gates"]["freshness"]["max_age_days"])
 
-    return crawl_terms(
+    parsed_total = 0
+
+    def parse_page(text: str) -> dict[str, Any]:
+        nonlocal parsed_total
+        result = parse(text, now=now)
+        parsed_total += len(result["postings"])
+        return result
+
+    result = crawl_terms(
         site=SITE,
         fetcher=fetcher,
         url_for=url_for,
-        parse_page=lambda html: parse(html, now=now),
+        parse_page=parse_page,
         terms=terms if terms is not None else search_terms(spec),
         variants=[""],
         cutoff=(now - timedelta(days=max_age_days)).isoformat(timespec="seconds"),
         max_pages=max_pages,
     )
+
+    # The failure this module lived with for three months: every request a 200,
+    # every page parsed, nothing in any of them. A run that reads zero postings
+    # across every term is far likelier a changed site than an empty market, so
+    # it is reported as a failed fetch rather than as a quiet, clean nothing.
+    if result.pages_fetched and parsed_total == 0:
+        result.errors.append(
+            f"0 postings parsed across {result.pages_fetched} pages that answered — "
+            "the site or its API has most likely changed shape; check before trusting "
+            "an empty drushim run"
+        )
+    return result
