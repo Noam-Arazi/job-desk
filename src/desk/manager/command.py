@@ -41,6 +41,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from .. import history
 from ..config import load_spec, paths
 from ..store import Store
 from . import delivery, inbox, render, states, timers
@@ -63,6 +64,9 @@ def cmd_digest(args: argparse.Namespace) -> int:
         return 1
 
     now = datetime.now()
+    # Read before the store is opened and whatever happens to it: the tally is
+    # a fact about Noam's own file, and a failure to read it is shown, not fatal.
+    tracker = history.tally(history.tracker_path(), today=now.date())
     store = Store(paths().ensure().db)
     try:
         # Found, reported, delivered, and only then written. See the note above.
@@ -76,6 +80,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
                 limit=args.limit,
                 min_score=args.min_score,
                 closed=closing,
+                tracker=tracker,
             )
 
         if getattr(args, "check_open", False):
@@ -170,6 +175,7 @@ def cmd_inbox(args: argparse.Namespace) -> int:
             spec=spec,
             now=datetime.now(),
             cut=_cutter(store, args),
+            tracker=history.tracker_path(),
         )
     except delivery.DeliveryError as error:
         print(str(error), file=sys.stderr)

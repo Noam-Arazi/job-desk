@@ -143,6 +143,10 @@ class Digest:
     # this morning. It is here so the reader can tell a quiet day apart from a
     # scan that did not run — the two produce an identical shortlist otherwise.
     arrivals: int = 0
+    # The two counts from Noam's hand-kept tracker, or why they could not be
+    # read. None when nobody asked — a page behind the "more" button, a test —
+    # which renders as nothing rather than as a tracker that failed.
+    tracker: Any = None
 
     @property
     def empty(self) -> bool:
@@ -160,6 +164,7 @@ class Digest:
             "offset": self.offset,
             "remaining": self.remaining,
             "arrivals": self.arrivals,
+            "tracker": self.tracker.as_dict() if self.tracker is not None else None,
             "suppressed": dict(sorted(self.suppressed.items())),
             # Stated in the payload and not only in the prose, so a consumer of
             # the JSON reads the same guarantee a reader of the text does.
@@ -189,6 +194,7 @@ def build(
     min_score: float | None = None,
     closed: tuple[str, ...] = (),
     offset: int = 0,
+    tracker: Any = None,
 ) -> Digest:
     """Assemble today's digest from the store.
 
@@ -209,6 +215,9 @@ def build(
     delivered — see `timers.close`. They are named in the digest and suppressed
     from it in the same breath: an item reported as closed must not also be
     offered as a candidate, nor chased in the follow-up list.
+
+    `tracker` is `history.Tally` — counted by the caller from the file Noam
+    keeps, because this function reads the store and nothing else.
     """
     settings = spec["digest"]
     ceiling = settings["max_items"] if limit is None else limit
@@ -295,6 +304,7 @@ def build(
         offset=start,
         remaining=max(0, len(ranked) - start - window),
         arrivals=store.first_seen_on(now.date().isoformat()),
+        tracker=tracker,
     )
 
 

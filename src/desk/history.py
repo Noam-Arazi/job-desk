@@ -41,10 +41,13 @@ from today and reporting a three-week-old silence as fresh.
 from __future__ import annotations
 
 import csv
+import fcntl
+import io
+import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -401,3 +404,223 @@ def _note(entry: Entry) -> str:
     """The tracker's own note, kept verbatim, prefixed with where it came from."""
     head = f"imported from the tracker ({entry.date or 'no date recorded'})"
     return f"{head} · {entry.note}" if entry.note else head
+
+
+# --------------------------------------------------------------------------
+# the tracker read for the digest, and written to by the digest's own button
+# --------------------------------------------------------------------------
+
+# The tracker's location. The import has always defaulted to this path; it lives
+# here now so the digest and the inbox read and write the same file the import
+# does, and `DESK_TRACKER` points all three at a copy when that is wanted.
+TRACKER_ENV = "DESK_TRACKER"
+TRACKER = Path.home() / "קורות חיים" / "הגשות.csv"
+
+# The tracker's own word for a row that was sent and has not been answered, and
+# what it writes in `via` for an application made from the digest — three rows
+# Noam typed by hand on 02.11 already say `job-desk` there.
+SUBMITTED = "applied"
+VIA_DIGEST = "job-desk"
+
+# How a board's id is written in `source`, the way the hand-typed rows spell it.
+SITE_NAMES = {
+    "linkedin": "LinkedIn",
+    "alljobs": "AllJobs",
+    "jobify": "Jobify",
+    "drushim": "Drushim",
+    "gotfriends": "GotFriends",
+    "xplace": "Xplace",
+}
+
+
+def tracker_path(env: Mapping[str, str] | None = None) -> Path:
+    environ = os.environ if env is None else env
+    override = str(environ.get(TRACKER_ENV) or "").strip()
+    return Path(override).expanduser() if override else TRACKER
+
+
+@dataclass(frozen=True)
+class Tally:
+    """The two numbers the digest opens with, or why they could not be counted.
+
+    `error` is not swallowed into zeros. A tracker that cannot be read and a
+    tracker with nothing open print the same "0", and only one of them is true.
+    """
+
+    open: int = 0
+    yesterday: int = 0
+    error: str = ""  # the kind of failure, in English; empty when it was read
+    path: str = ""  # the file asked for, on a line of its own when shown
+
+    @property
+    def ok(self) -> bool:
+        return not self.error
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "open": self.open,
+            "yesterday": self.yesterday,
+            "error": self.error,
+            "path": self.path,
+        }
+
+
+def tally(path: Path | str, *, today: date) -> Tally:
+    """Open applications, and how many were sent the day before `today`.
+
+    Open is the tracker's own semantics, through `STATE_OF`: every status that
+    does not map to `closed`. A row whose status the manager does not know is
+    neither open nor closed and is not counted as either — `unknown` is how the
+    import reports it. Yesterday counts by the date column alone, whatever has
+    happened to the application since.
+    """
+    try:
+        entries = read(path)
+    except (OSError, ValueError, csv.Error) as error:
+        # The type and not the message: the message quotes the path, and the
+        # path is in a Hebrew-named folder, so the two travel on separate lines.
+        reason = type(error).__name__
+        if isinstance(error, ValueError) and "missing columns" in str(error):
+            reason = "missing columns " + str(error).rsplit("missing columns", 1)[-1].strip()
+        return Tally(error=reason, path=str(path))
+    before = (today - timedelta(days=1)).isoformat()
+    still_open = 0
+    for entry in entries:
+        try:
+            state = entry.state
+        except UnknownStatus:
+            continue
+        if state != CLOSED:
+            still_open += 1
+    sent = sum(1 for entry in entries if entry.date[:10] == before)
+    return Tally(open=still_open, yesterday=sent)
+
+
+@dataclass(frozen=True)
+class Recorded:
+    """What pressing "applied" did to the tracker."""
+
+    written: bool
+    entry: Entry
+    why: str = ""  # "already there" when it was a repeat press
+
+
+def entry_for(posting: Mapping[str, Any], fingerprint: str, *, today: date) -> Entry:
+    """The tracker row for a job applied to from the digest.
+
+    `source` carries the link, the way Noam's own rows carry `LinkedIn
+    (jobs/view/…)`, because the link is what `_board_fingerprint` uses to land a
+    re-import on the scraped posting rather than minting a manual twin of it.
+    The note carries the fingerprint, which is what makes a second press find
+    the first one even when the posting has no link.
+    """
+    site = str(posting.get("site") or "")
+    name = SITE_NAMES.get(site, site)
+    url = str(posting.get("url") or "")
+    source = f"{name} ({url})" if name and url else (url or name)
+    return Entry(
+        date=today.isoformat(),
+        company=str(posting.get("company") or ""),
+        role=str(posting.get("title") or ""),
+        location=str(posting.get("location") or ""),
+        source=source,
+        via=VIA_DIGEST,
+        status=SUBMITTED,
+        note=f"נרשם מכפתור ההגשה בדייג׳סט · {fingerprint[:16]}",
+    )
+
+
+def record(
+    path: Path | str, posting: Mapping[str, Any], fingerprint: str, *, today: date
+) -> Recorded:
+    """Append one application to the tracker, unless it is already there.
+
+    Append-only, and that is the whole safety argument. Noam edits this file by
+    hand, and a read-modify-rewrite would erase whatever he saved between the
+    read and the write. Opening for append and writing the row in one call never
+    touches a byte he wrote. The lock keeps two presses from both deciding the
+    row is missing; an editor does not take it, and does not need to, since
+    nothing here rewrites what an editor might be holding.
+
+    The row is written in the file's own shape: its column order, and the line
+    ending its last line uses. A file that does not end in a newline gets one
+    before the row, or the row would be glued onto Noam's last line.
+
+    A missing tracker is an error, not a file to create — the path being wrong
+    is far likelier than the tracker being gone, and a fresh file in the wrong
+    place is an application recorded where nobody will look.
+    """
+    target = Path(path).expanduser()
+    entry = entry_for(posting, fingerprint, today=today)
+    if not target.is_file():
+        raise FileNotFoundError(f"no tracker at {target}")
+
+    with target.open("a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            handle.seek(0)
+            text = handle.read().decode("utf-8-sig")
+            reader = csv.DictReader(io.StringIO(text, newline=""))
+            header = list(reader.fieldnames or ())
+            missing = [c for c in COLUMNS if c not in header]
+            if missing:
+                raise ValueError(f"{target}: missing columns {missing}")
+            if any(_names(row, entry, fingerprint, posting) for row in reader):
+                return Recorded(written=False, entry=entry, why="already there")
+
+            ending = _ending(text)
+            buffer = io.StringIO()
+            writer = csv.DictWriter(buffer, fieldnames=header, lineterminator=ending)
+            writer.writerow({c: getattr(entry, c) for c in COLUMNS})
+            row = buffer.getvalue()
+            if text and not text.endswith(("\n", "\r")):
+                row = ending + row
+            # One write, on a handle opened for append: the kernel puts it at
+            # the end of the file as it is now, not as it was when it was read.
+            handle.write(row.encode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    return Recorded(written=True, entry=entry)
+
+
+def _ending(text: str) -> str:
+    """The newline the file's last line uses, or its header's if it has none."""
+    if text.endswith("\r\n"):
+        return "\r\n"
+    if text.endswith("\n"):
+        return "\n"
+    first = text.split("\n", 1)
+    return "\r\n" if len(first) > 1 and first[0].endswith("\r") else "\n"
+
+
+def _link_key(url: str) -> str:
+    key = re.sub(r"^[a-z]+://", "", url.strip().lower())
+    return key.removeprefix("www.").rstrip("/")
+
+
+def _names(
+    row: Mapping[str, Any], entry: Entry, fingerprint: str, posting: Mapping[str, Any]
+) -> bool:
+    """Whether a tracker row already records this application.
+
+    By the fingerprint a digest press writes into its note, by the posting's
+    link anywhere in `source` or `via`, or by the content fingerprint of the
+    row itself — the last is how a row Noam typed by hand before pressing is
+    recognised.
+    """
+    note = str(row.get("note") or "")
+    if fingerprint and fingerprint[:16] in note:
+        return True
+    link = _link_key(str(posting.get("url") or ""))
+    if link:
+        where = f"{row.get('source') or ''} {row.get('via') or ''}".lower()
+        if link in where:
+            return True
+    company = str(row.get("company") or "").strip()
+    role = str(row.get("role") or "").strip()
+    if not (company or role):
+        return False
+    theirs = make_fingerprint(role, company, str(row.get("location") or "").strip())
+    return theirs in (fingerprint, entry.fingerprint)
