@@ -48,16 +48,20 @@ _NO_ARRIVALS_HE = "אזהרה — הסריקה הבוקר לא הביאה אף �
 _NO_ARRIVALS_EN = "0 new roles today. every board publishes daily; check the fetch."
 _EMPTY_EN = "nothing cleared the floor. the digest is never padded to fill it."
 
+# The tracker line. Hebrew with digits only: a digit has no direction of its
+# own, so the line stays one direction, which a Latin word would not.
+_TRACKER_HE = "בטבלת ההגשות: {open} פתוחות · {yesterday} הוגשו אתמול"
+_TRACKER_FAILED_HE = "אזהרה — לא הצלחתי לקרוא את טבלת ההגשות, אז אין כאן ספירה."
+
 _FOLLOW_UPS_HE = "מעקב — מה שהוגש וממתין לתשובה"
 _CLOSED_HE = "נסגר מעצמו אחרי חלון הקיפאון שבמפרט"
 
 
 def as_text(digest: Digest) -> str:
     """The terminal rendering. Wide, unabbreviated, every verdict visible."""
-    lines: list[str] = [
-        f"job-desk digest   {digest.date}",
-        _headline(digest),
-    ]
+    lines: list[str] = [f"job-desk digest   {digest.date}"]
+    lines += _tracker(digest, reason=True)
+    lines.append(_headline(digest))
     if digest.suppressed:
         lines.append("suppressed  " + _suppressed(digest))
     lines += _arrivals(digest)
@@ -99,7 +103,7 @@ def as_telegram(digest: Digest) -> str:
     because a posting had an underscore in it is a worse outcome than a message
     without bold text.
     """
-    lines: list[str] = [f"job-desk  {digest.date}", _headline(digest)]
+    lines: list[str] = [f"job-desk  {digest.date}", *_tracker(digest), _headline(digest)]
     # Above the postings, not below them. A warning that the scan failed is
     # worth more than the stale shortlist under it, and anything printed after
     # five jobs and their links is a line Noam scrolls past.
@@ -150,17 +154,20 @@ def as_json(digest: Digest) -> str:
 # button reorder exactly as they do on one line.
 RELEVANT = "y"
 NOT_RELEVANT = "n"
+APPLIED = "a"
 MORE = "m"
 
 
 def keyboard(digest: Digest) -> list[list[tuple[str, str]]]:
     """The choices offered under one digest message.
 
-    Two per posting and one for the page. This is the whole inbound surface of
-    the system: there is no free-text command, nothing here can be typed by
+    Three per posting and one for the page. This is the whole inbound surface
+    of the system: there is no free-text command, nothing here can be typed by
     accident, and every button names one posting that the same message just
-    showed. A press means "cut a CV for this one" or "I am not interested" —
-    never "apply", which is not an act this system performs at all.
+    showed. A press means "cut a CV for this one", "I am not interested", or
+    "I have sent it" — never "apply", which is not an act this system performs
+    at all. 📨 records an application Noam already made by hand, in the store
+    and in his tracker; it is a report of the past, not an instruction.
     """
     rows: list[list[tuple[str, str]]] = []
     for position, item in enumerate(digest.items, start=1):
@@ -168,6 +175,7 @@ def keyboard(digest: Digest) -> list[list[tuple[str, str]]]:
             [
                 (f"✅ {position}", f"{RELEVANT}:{item.fingerprint}"),
                 (f"✖️ {position}", f"{NOT_RELEVANT}:{item.fingerprint}"),
+                (f"📨 {position}", f"{APPLIED}:{item.fingerprint}"),
             ]
         )
     if digest.remaining > 0:
@@ -184,7 +192,7 @@ def keyboard(digest: Digest) -> list[list[tuple[str, str]]]:
 # a press can name the wrong job.
 DECIDED = "done"
 
-MARKED = {RELEVANT: "✅", NOT_RELEVANT: "✖️"}
+MARKED = {RELEVANT: "✅", NOT_RELEVANT: "✖️", APPLIED: "📨"}
 
 
 def decided(rows, fingerprint: str, action: str):
@@ -193,6 +201,10 @@ def decided(rows, fingerprint: str, action: str):
     The replacement carries a callback of its own rather than none, because a
     button with no data is a button Telegram will not render — and pressing it
     again has to be harmless, so it answers to nothing this system handles.
+
+    An approval keeps the 📨 button beside its tick. ✅ means "make me a CV",
+    and the CV is what he applies with — so the moment after the approval is
+    exactly when "I sent it" is still to come.
     """
     marked = []
     for row in rows:
@@ -200,9 +212,22 @@ def decided(rows, fingerprint: str, action: str):
         if not target:
             marked.append([tuple(button) for button in row])
             continue
-        position = next((label.split()[-1] for label, _ in row if " " in label), "")
-        marked.append([(f"{MARKED.get(action, '·')} {position} ✓", f"{DECIDED}:{fingerprint}")])
+        position = _position(row)
+        done = (f"{MARKED.get(action, '·')} {position} ✓", f"{DECIDED}:{fingerprint}")
+        if action == RELEVANT:
+            marked.append([done, (f"📨 {position}", f"{APPLIED}:{fingerprint}")])
+        else:
+            marked.append([done])
     return marked
+
+
+def _position(row) -> str:
+    """The posting's number, read off the row's labels — `✅ 3 ✓` included."""
+    for label, _ in row:
+        for token in str(label).split():
+            if token.isdigit():
+                return token
+    return ""
 
 
 RENDERERS = {"text": as_text, "telegram": as_telegram, "json": as_json}
@@ -220,6 +245,24 @@ def _headline(digest: Digest) -> str:
         f"   floor {digest.min_score:.2f}   ceiling {digest.max_items}"
     )
     return line + (f"   {digest.remaining} below" if digest.remaining else "")
+
+
+def _tracker(digest: Digest, *, reason: bool = False) -> list[str]:
+    """Open applications and yesterday's, from the file Noam keeps by hand.
+
+    A tracker that could not be read says so, in the same place the counts
+    would have been. A missing line would read as a feature that was never
+    built, and two zeros would read as a quiet week. On the terminal the
+    error itself follows on an English line of its own.
+    """
+    tally = digest.tracker
+    if tally is None:
+        return []
+    if tally.error:
+        if not reason:
+            return [_TRACKER_FAILED_HE]
+        return [_TRACKER_FAILED_HE, f"tracker  {tally.error}", tally.path]
+    return [_TRACKER_HE.format(open=tally.open, yesterday=tally.yesterday)]
 
 
 def _arrivals(digest: Digest) -> list[str]:

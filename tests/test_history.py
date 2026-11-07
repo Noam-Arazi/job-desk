@@ -358,3 +358,177 @@ def test_an_unknown_status_skips_its_row_and_keeps_the_rest(store, tmp_path):
     assert [r.entry.company for r in planned] == ["Classiq", "BDO", "הטכניון"]
     assert len(history.unknown(entries)) == 1
     assert "ghosted" in history.unknown(entries)[0]
+
+
+# --- the digest's two counts ----------------------------------------------
+
+
+def test_the_tally_counts_open_by_the_tracker_s_own_statuses(tmp_path):
+    rows = [
+        ("2026-11-06", "A", "Analyst", "", "", "", "applied", ""),
+        ("2026-11-06", "B", "Analyst", "", "", "", "screening", ""),
+        ("2026-11-05", "C", "Analyst", "", "", "", "interview", ""),
+        ("2026-11-06", "D", "Analyst", "", "", "", "rejected", ""),
+        ("2026-11-01", "E", "Analyst", "", "", "", "closed", ""),
+        ("2026-11-01", "F", "Analyst", "", "", "", "maybe?", ""),
+    ]
+    path = write_csv(tmp_path / "t.csv", rows)
+
+    tally = history.tally(path, today=datetime(2026, 11, 7).date())
+
+    assert tally.ok
+    assert tally.open == 3, "applied, screening and interview; not the closed, not the unknown"
+    assert tally.yesterday == 3, "submitted on the 6th, whatever became of them since"
+
+
+def test_a_tracker_that_cannot_be_read_is_reported_not_counted_as_zero(tmp_path):
+    missing = history.tally(tmp_path / "nowhere.csv", today=NOW.date())
+    assert not missing.ok and missing.error == "FileNotFoundError"
+    assert missing.path.endswith("nowhere.csv")
+
+    short = tmp_path / "short.csv"
+    short.write_text("company,role\nAcme,Analyst\n", encoding="utf-8")
+    broken = history.tally(short, today=NOW.date())
+    assert not broken.ok and broken.error.startswith("missing columns")
+
+
+def test_the_tracker_path_can_be_pointed_elsewhere():
+    assert history.tracker_path({}) == history.TRACKER
+    assert history.tracker_path({"DESK_TRACKER": "/tmp/x.csv"}) == Path("/tmp/x.csv")
+
+
+# --- the digest's 📨 button appends to the tracker -------------------------
+
+POSTING = {
+    "site": "linkedin",
+    "url": "https://www.linkedin.com/jobs/view/4485813910/",
+    "title": "AI Product Manager",
+    "company": "Herzliya Medical, Center",
+    "location": "הרצליה",
+}
+TODAY = datetime(2026, 11, 7).date()
+
+
+def crlf_tracker(path: Path, *, trailing: bool = True) -> bytes:
+    """The real tracker's shape: no BOM, CRLF, a quoted Hebrew note."""
+    text = (
+        "date,company,role,location,source,via,status,note\r\n"
+        '2026-11-06,מדיטון,רכז/ת פרויקטים,פתח תקווה,AllJobs,AllJobs,applied,"קו""ח · פער"\r\n'
+    )
+    if not trailing:
+        text = text[:-2]
+    raw = text.encode("utf-8")
+    path.write_bytes(raw)
+    return raw
+
+
+def test_an_application_is_appended_in_the_tracker_s_own_format(tmp_path):
+    path = tmp_path / "הגשות.csv"
+    before = crlf_tracker(path)
+
+    done = history.record(path, POSTING, "f" * 40, today=TODAY)
+
+    after = path.read_bytes()
+    assert done.written
+    assert after.startswith(before), "nothing Noam wrote was rewritten"
+    added = after[len(before):].decode("utf-8")
+    assert added.endswith("\r\n") and added.count("\n") == 1
+    row = next(csv.reader([added.rstrip("\r\n")]))
+    assert row[:7] == [
+        "2026-11-07",
+        "Herzliya Medical, Center",
+        "AI Product Manager",
+        "הרצליה",
+        "LinkedIn (https://www.linkedin.com/jobs/view/4485813910/)",
+        "job-desk",
+        "applied",
+    ]
+    assert "f" * 16 in row[7]
+    # and the import reads it back as an ordinary row
+    entries = history.read(path)
+    assert entries[-1].state == states.APPLIED and entries[-1].via == "job-desk"
+
+
+def test_pressing_twice_does_not_add_a_second_row(tmp_path):
+    path = tmp_path / "t.csv"
+    crlf_tracker(path)
+    history.record(path, POSTING, "f" * 40, today=TODAY)
+    once = path.read_bytes()
+
+    again = history.record(path, POSTING, "f" * 40, today=TODAY)
+
+    assert not again.written and again.why == "already there"
+    assert path.read_bytes() == once
+
+
+def test_a_row_noam_typed_with_the_same_link_counts_as_already_there(tmp_path):
+    path = write_csv(
+        tmp_path / "t.csv",
+        [("2026-11-06", "HMC", "AI PM", "", "LinkedIn", "linkedin.com/jobs/view/4485813910",
+          "applied", "")],
+    )
+    before = path.read_bytes()
+
+    assert not history.record(path, POSTING, "e" * 40, today=TODAY).written
+    assert path.read_bytes() == before
+
+
+def test_a_row_noam_typed_by_hand_for_the_same_job_counts_as_already_there(tmp_path):
+    path = write_csv(
+        tmp_path / "t.csv",
+        [("2026-11-06", POSTING["company"], POSTING["title"], POSTING["location"], "", "",
+          "applied", "")],
+    )
+    posting = dict(POSTING, url="")
+    assert not history.record(path, posting, "e" * 40, today=TODAY).written
+
+
+def test_a_last_line_with_no_newline_is_not_glued_to(tmp_path):
+    path = tmp_path / "t.csv"
+    crlf_tracker(path, trailing=False)
+
+    history.record(path, POSTING, "f" * 40, today=TODAY)
+
+    entries = history.read(path)
+    assert [e.company for e in entries] == ["מדיטון", "Herzliya Medical, Center"]
+    assert entries[0].note == 'קו"ח · פער'
+
+
+def test_an_lf_tracker_gets_an_lf_row(tmp_path):
+    path = write_csv(tmp_path / "t.csv")
+    path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
+
+    history.record(path, POSTING, "f" * 40, today=TODAY)
+
+    assert b"\r" not in path.read_bytes()
+
+
+def test_a_missing_tracker_is_an_error_and_is_not_created(tmp_path):
+    path = tmp_path / "nowhere.csv"
+    with pytest.raises(FileNotFoundError):
+        history.record(path, POSTING, "f" * 40, today=TODAY)
+    assert not path.exists()
+
+
+def test_a_tracker_missing_a_column_is_refused_and_left_alone(tmp_path):
+    path = tmp_path / "short.csv"
+    path.write_text("company,role\r\nAcme,Analyst\r\n", encoding="utf-8")
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="missing columns"):
+        history.record(path, POSTING, "f" * 40, today=TODAY)
+    assert path.read_bytes() == before
+
+
+def test_an_edit_saved_between_two_presses_survives_the_second(tmp_path):
+    """Append-only: a row Noam adds by hand is never overwritten by a press."""
+    path = tmp_path / "t.csv"
+    crlf_tracker(path)
+    history.record(path, POSTING, "f" * 40, today=TODAY)
+    with path.open("ab") as handle:
+        handle.write("2026-11-07,ידני,ידני,,,,applied,\r\n".encode())
+
+    other = dict(POSTING, url="https://alljobs.co.il/x?JobID=1", title="Other")
+    history.record(path, other, "d" * 40, today=TODAY)
+
+    companies = [e.company for e in history.read(path)]
+    assert companies == ["מדיטון", "Herzliya Medical, Center", "ידני", "Herzliya Medical, Center"]

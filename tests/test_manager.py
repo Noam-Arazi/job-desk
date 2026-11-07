@@ -51,6 +51,13 @@ HEBREW = re.compile(r"[֐-׿]")
 LATIN = re.compile(r"[A-Za-z]")
 
 
+@pytest.fixture(autouse=True)
+def no_real_tracker(tmp_path, monkeypatch) -> None:
+    """Nothing here reads or writes Noam's own tracker. A test that wants one
+    points `DESK_TRACKER` at its own copy."""
+    monkeypatch.setenv("DESK_TRACKER", str(tmp_path / "no-tracker.csv"))
+
+
 @pytest.fixture
 def spec() -> dict:
     # The fixtures here are analyst postings; the rendering does not care which
@@ -1629,7 +1636,11 @@ def test_the_buttons_name_the_postings_the_message_just_showed(store, spec):
 
     assert len(rows) == len(today.items)
     for row, item in zip(rows, today.items, strict=True):
-        assert [data for _, data in row] == [f"y:{item.fingerprint}", f"n:{item.fingerprint}"]
+        assert [data for _, data in row] == [
+            f"y:{item.fingerprint}",
+            f"n:{item.fingerprint}",
+            f"a:{item.fingerprint}",
+        ]
 
 
 def test_every_callback_fits_the_field_telegram_gives_it(store, spec):
@@ -1947,9 +1958,9 @@ def test_a_press_marks_the_message_it_was_pressed_on(store, spec, tmp_path):
     decided_row = [row for row in buttons if "fp0" in row[0][1]][0]
     assert len(decided_row) == 1, "the pressed row collapses into the decision"
     assert decided_row[0][0].startswith("✖️") and decided_row[0][0].endswith("✓")
-    # every other posting keeps both of its buttons and its own position
+    # every other posting keeps all of its buttons and its own position
     other = [row for row in buttons if any("fp1" in data for _, data in row)][0]
-    assert len(other) == 2
+    assert len(other) == 3
 
 
 def test_pressing_a_decided_row_again_does_nothing(store, spec):
@@ -2127,3 +2138,166 @@ def test_the_cv_caption_carries_the_link_and_why_it_is_the_base() -> None:
     assert caption.startswith("Analyst\nZIM\nhttps://example.test/job/1\n\n")
     assert len(caption) <= 1024
     assert inbox._caption(Postings(), "fp") == "Analyst\nZIM\nhttps://example.test/job/1"
+
+
+# ---------------------------------------------------------------------------
+# the tracker: two counts on top of the digest, and 📨 writing to it
+# ---------------------------------------------------------------------------
+
+TRACKER_HEADER = "date,company,role,location,source,via,status,note\r\n"
+
+
+def tracker_file(tmp_path: Path, rows: str = "") -> Path:
+    path = tmp_path / "הגשות.csv"
+    path.write_bytes((TRACKER_HEADER + rows).encode("utf-8"))
+    return path
+
+
+def test_the_tracker_counts_open_the_digest_in_one_hebrew_line(spec, store) -> None:
+    from desk import history
+
+    analysed(store, "fp0", score=0.9)
+    today = build(store, spec, tracker=history.Tally(open=41, yesterday=3))
+
+    for text in (render.as_text(today), render.as_telegram(today)):
+        second = text.splitlines()[1]
+        assert second == "בטבלת ההגשות: 41 פתוחות · 3 הוגשו אתמול"
+        assert one_direction_per_line(text) == []
+    assert json.loads(render.as_json(today))["tracker"]["open"] == 41
+
+
+def test_a_tracker_that_could_not_be_read_says_so_where_the_counts_would_be(spec, store) -> None:
+    from desk import history
+
+    failed = history.Tally(error="FileNotFoundError", path="/nowhere/t.csv")
+    today = build(store, spec, tracker=failed)
+
+    phone = render.as_telegram(today).splitlines()
+    assert phone[1].startswith("אזהרה") and "טבלת ההגשות" in phone[1]
+    terminal = render.as_text(today).splitlines()
+    assert terminal[1] == phone[1]
+    assert terminal[2] == "tracker  FileNotFoundError"
+    assert terminal[3] == "/nowhere/t.csv"
+
+
+def test_a_digest_built_without_a_tracker_prints_no_tracker_line(spec, store) -> None:
+    today = build(store, spec)
+    assert "טבלת ההגשות" not in render.as_telegram(today)
+
+
+def test_the_digest_command_opens_with_the_tracker_counts(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("DESK_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("DESK_TRACKER", str(tracker_file(tmp_path)))
+    from desk.cli import main
+
+    assert main(["digest"]) == 0
+    assert "בטבלת ההגשות: 0 פתוחות · 0 הוגשו אתמול" in capsys.readouterr().out
+
+
+def applied_press(fingerprint: str, update_id: int = 1, rows=None) -> dict:
+    update = press(fingerprint, action="a", update_id=update_id)
+    if rows is not None:
+        update["callback_query"]["message"]["message_id"] = 50
+        update["callback_query"]["message"]["reply_markup"] = {
+            "inline_keyboard": [[{"text": t, "callback_data": d} for t, d in row] for row in rows]
+        }
+    return update
+
+
+def test_sent_records_the_application_in_the_store_and_the_tracker(store, spec, tmp_path):
+    """📨 — Noam applied himself. The job stops coming back, and his tracker
+    gets the row he would otherwise have typed."""
+    from desk import history
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9, title="Data Analyst", company="Bluewick")
+    analysed(store, "fp1", score=0.8)
+    path = tracker_file(tmp_path)
+    sink = FakeSink(updates=[applied_press("fp0")])
+
+    failed = inbox.run(store, sink, spec=spec, now=NOW, log=lambda *_: None, tracker=path,
+                       cut=lambda *_: pytest.fail("a sent press cuts nothing"))
+
+    assert failed == 0
+    assert states.current(store, "fp0") == states.APPLIED
+    assert store.has_applied("fp0")
+    assert store.state("fp0")["due_at"], "the follow-up clock starts"
+    assert [i.fingerprint for i in build(store, spec).items] == ["fp1"]
+    entries = history.read(path)
+    assert [(e.date, e.company, e.role, e.via, e.status) for e in entries] == [
+        ("2026-08-18", "Bluewick", "Data Analyst", "job-desk", "applied")
+    ]
+    assert sink.answered[-1] == ("cb1", "נרשם בטבלת ההגשות")
+
+
+def test_pressing_sent_twice_writes_one_row(store, spec, tmp_path):
+    from desk import history
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    path = tracker_file(tmp_path)
+    sink = FakeSink(updates=[applied_press("fp0", 1), applied_press("fp0", 2)])
+
+    failed = inbox.run(store, sink, spec=spec, now=NOW, cut=lambda *_: None,
+                       log=lambda *_: None, tracker=path)
+
+    assert failed == 0
+    assert len(history.read(path)) == 1
+    assert sink.answered[-1] == ("cb2", "כבר רשום בטבלת ההגשות")
+    assert [e["to_state"] for e in store.state_history("fp0")] == [states.APPLIED]
+
+
+def test_sent_after_an_interview_does_not_move_the_pipeline_back(store, spec, tmp_path):
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    states.move(store, "fp0", states.INTERVIEW, spec=spec, now=NOW)
+    inbox.run(store, FakeSink(updates=[applied_press("fp0")]), spec=spec, now=NOW,
+              cut=lambda *_: None, log=lambda *_: None, tracker=tracker_file(tmp_path))
+
+    assert states.current(store, "fp0") == states.INTERVIEW
+
+
+def test_a_tracker_that_cannot_be_written_still_leaves_the_store_applied(store, spec, tmp_path):
+    """The application is the fact. A tracker that is missing is told to Noam,
+    and the job still leaves the digest."""
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    sink = FakeSink(updates=[applied_press("fp0")])
+
+    failed = inbox.run(store, sink, spec=spec, now=NOW, cut=lambda *_: None,
+                       log=lambda *_: None, tracker=tmp_path / "nowhere.csv")
+
+    assert failed == 0
+    assert states.current(store, "fp0") == states.APPLIED
+    assert not (tmp_path / "nowhere.csv").exists()
+    assert "טבלת ההגשות" in sink.answered[-1][1]
+    assert any("FileNotFoundError" in text for text, _ in sink.messages)
+
+
+def test_approving_keeps_the_sent_button_and_sent_closes_the_row(store, spec, tmp_path):
+    """✅ means "make me a CV", so "I sent it" is still to come after it."""
+    from desk.manager import inbox
+
+    analysed(store, "fp0", score=0.9)
+    rows = [list(row) for row in render.keyboard(build(store, spec))]
+    approved = render.decided(rows, "fp0", render.RELEVANT)
+    assert approved[0] == [("✅ 1 ✓", "done:fp0"), ("📨 1", "a:fp0")]
+
+    edited: list = []
+
+    class Marking(FakeSink):
+        def edit_keyboard(self, message_id, buttons):
+            edited.append([list(row) for row in buttons])
+
+    inbox.run(store, Marking(updates=[applied_press("fp0", rows=approved)]), spec=spec, now=NOW,
+              cut=lambda *_: None, log=lambda *_: None, tracker=tracker_file(tmp_path))
+
+    assert edited[-1][0] == [("📨 1 ✓", "done:fp0")]
+
+
+def test_the_sent_button_is_read_as_its_own_action(store):
+    from desk.manager import inbox
+
+    assert inbox.read(applied_press("fp0"), chat_id="12345").action == inbox.APPLIED

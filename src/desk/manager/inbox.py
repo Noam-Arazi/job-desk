@@ -18,10 +18,12 @@ vocabulary. A message typed at the bot is not read by anything here.
     or logged in full.
 
     a press is a decision, not an instruction. `y` records `approved`, which is
-    the state that already meant "Noam decided this one is worth it", and `n`
-    records `closed`. Neither sends anything to an employer, and there is no
-    button that could: `check_auto_apply` still runs and this module has no
-    code path to an application.
+    the state that already meant "Noam decided this one is worth it", `n`
+    records `closed`, and `a` records `applied` — after the fact, for an
+    application he made himself — and appends it to his tracker. None of them
+    sends anything to an employer, and there is no button that could:
+    `check_auto_apply` still runs and this module has no code path to an
+    application.
 
 The cursor is stored, not held. Telegram keeps an unacknowledged update for 24
 hours and hands it back until an offset moves past it, so a run that dies
@@ -40,11 +42,16 @@ CHANNEL = "telegram"
 
 APPROVE = "approve"
 DISMISS = "dismiss"
+APPLIED = "applied"
 MORE = "more"
 IGNORE = "ignore"
 
-# The three prefixes render.keyboard writes into the buttons.
-ACTIONS = {"y": APPROVE, "n": DISMISS, "m": MORE}
+# The prefixes render.keyboard writes into the buttons.
+ACTIONS = {"y": APPROVE, "n": DISMISS, "a": APPLIED, "m": MORE}
+
+# What a press of 📨 records as the channel in the store's blocklist — the same
+# word the tracker gets in `via`, so the two records of one fact agree.
+VIA = "job-desk"
 
 
 @dataclass(frozen=True)
@@ -149,7 +156,7 @@ def _stamped(log, now):
     return lambda line: log(f"{prefix}  {line}")
 
 
-def run(store, sink, *, spec: dict[str, Any], now, cut, log=print) -> int:
+def run(store, sink, *, spec: dict[str, Any], now, cut, log=print, tracker=None) -> int:
     """Poll once, act on every press, and move the cursor past what was handled.
 
     `cut` is passed in rather than imported, which is what keeps this file free
@@ -157,6 +164,10 @@ def run(store, sink, *, spec: dict[str, Any], now, cut, log=print) -> int:
     fingerprint and returns the path of the document it wrote, or an empty
     string; raising is allowed and is treated as "this one failed", never as
     "stop reading Noam's answers".
+
+    `tracker` is the path of Noam's application CSV, which a 📨 press appends
+    to. None means no file is written — the store still records the press —
+    which is what every test that is not about the tracker gets.
 
     Returns the number of presses that could not be carried out. Zero updates
     is the ordinary case and is not a failure — most polls find nothing.
@@ -183,7 +194,8 @@ def run(store, sink, *, spec: dict[str, Any], now, cut, log=print) -> int:
             continue
         try:
             log(_act(press, store=store, sink=sink, spec=spec, now=now, cut=cut,
-                     digest_module=digest_module, render=render, states=states, timers=timers))
+                     digest_module=digest_module, render=render, states=states, timers=timers,
+                     tracker=tracker))
         except Exception as error:  # noqa: BLE001 - one press must not stop the rest
             failed += 1
             log(f"failed   {press.action} {press.fingerprint[:12]}: {type(error).__name__}")
@@ -193,7 +205,8 @@ def run(store, sink, *, spec: dict[str, Any], now, cut, log=print) -> int:
     return failed
 
 
-def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, timers) -> str:
+def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, timers,
+         tracker=None) -> str:
     if press.action == MORE:
         page = digest_module.build(
             store,
@@ -216,6 +229,10 @@ def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, t
         _answer(sink, press, "ירד מהרשימה")
         _mark(sink, press, render, "n")
         return f"closed   {press.fingerprint[:12]}"
+
+    if press.action == APPLIED:
+        return _applied(press, store=store, sink=sink, spec=spec, now=now,
+                        render=render, states=states, timers=timers, tracker=tracker)
 
     # APPROVE. The state is recorded first and the document second, because the
     # decision is the fact worth keeping: a cut that fails is retried by the
@@ -248,6 +265,47 @@ def _act(press, *, store, sink, spec, now, cut, digest_module, render, states, t
         [Document(path=path, caption=_caption(store, press.fingerprint, refusals))]
     )
     return f"approved {press.fingerprint[:12]}, document sent"
+
+
+def _applied(press, *, store, sink, spec, now, render, states, timers, tracker) -> str:
+    """📨 — Noam sent this one himself. Record it in the store and in his tracker.
+
+    The store first, for the reason the approval writes its state first: the
+    fact is that he applied, and a tracker that could not be written must not
+    leave the job sitting in tomorrow's digest. The blocklist is written before
+    the move, with the channel, because `move` writes the same row with an
+    empty channel and the first insert is the one that stays (see history.py).
+
+    A posting already at or past `applied` — an interview, a repeat press, a
+    close — is not moved: the pipeline does not go backwards, and a second
+    press is a no-op rather than an error. The tracker append is idempotent on
+    its own terms, so a repeat press reaches it and finds the row there.
+    """
+    from .. import history
+
+    fingerprint = press.fingerprint
+    store.mark_applied(fingerprint, now=states.stamp(now), channel=VIA)
+    if not states.at_or_after(spec, states.current(store, fingerprint), states.APPLIED):
+        states.move(store, fingerprint, states.APPLIED, spec=spec, now=now,
+                    due_at=timers.due_at_for(states.APPLIED, now=now, spec=spec),
+                    note="applied, by button")
+    _mark(sink, press, render, "a")
+
+    if tracker is None:
+        _answer(sink, press, "סומן כהוגש")
+        return f"applied  {fingerprint[:12]}, no tracker configured"
+    posting = store.get_posting(fingerprint) or {}
+    try:
+        done = history.record(tracker, posting, fingerprint, today=now.date())
+    except Exception as error:  # noqa: BLE001 - the store has it; the file is told apart
+        _answer(sink, press, "סומן כהוגש, אבל טבלת ההגשות לא עודכנה")
+        _tell(sink, "סומן כהוגש, אבל לא הצלחתי לכתוב לטבלת ההגשות", [type(error).__name__])
+        return f"applied  {fingerprint[:12]}, tracker NOT written: {type(error).__name__}"
+    if not done.written:
+        _answer(sink, press, "כבר רשום בטבלת ההגשות")
+        return f"applied  {fingerprint[:12]}, tracker already had it"
+    _answer(sink, press, "נרשם בטבלת ההגשות")
+    return f"applied  {fingerprint[:12]}, tracker row added"
 
 
 def _tell(sink, headline: str, lines: list[str]) -> None:

@@ -575,6 +575,7 @@ def cmd_import_applications(args: argparse.Namespace) -> int:
     from . import history
     from .config import load_spec
 
+    args.csv = args.csv or str(history.tracker_path())
     try:
         entries = history.read(args.csv)
     except (OSError, ValueError) as exc:
@@ -763,8 +764,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     imports.add_argument(
         "--csv",
-        default=str(Path.home() / "קורות חיים" / "הגשות.csv"),
-        help="the tracker to read",
+        default=None,
+        help="the tracker to read (default: $DESK_TRACKER, else ~/קורות חיים/הגשות.csv)",
     )
     imports.add_argument("--write", action="store_true", help="record them; otherwise a dry run")
     imports.add_argument(
