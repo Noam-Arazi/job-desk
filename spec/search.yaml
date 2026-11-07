@@ -496,14 +496,48 @@ families:
     cv_base: product_project
     # Systems analysis and systems implementation are out — no experience
     # and no knowledge in that area.
+    #
+    # 07.11.2026 — Noam: technology project management (anchor: Bank of Israel
+    # 5331) "sounds spot on", so similar project-management titles come in too.
+    # It is one more direction, not the only one. Before this, "מנהל/ת
+    # פרויקטים" routed to no family at all: the only Hebrew term was the
+    # singular "מנהל פרויקט", and the matcher reads whole words. The bare plural
+    # forms are route-only — typed into a board they would pull in every
+    # construction project manager in the country. The typed terms name the
+    # technology / information-systems kind. "ראש צוות" is blocked by the
+    # seniority gate, so it is not listed.
+    terms_route_only:
+      - מנהל פרויקטים
+      - מנהלת פרויקטים
+      - מנהלת פרויקט
+      - מנהל פרויקטי
+      - מנהלת פרויקטי
+      - מוביל פרויקטים
+      - מובילת פרויקטים
+      - מוביל פרויקט
+      - רכזת פרויקטים
+      - מנהל תכניות
+      - ניהול פרויקטים טכנולוגיים
+      - מנהל תוכניות
+      - program manager
+      - project lead
+      - project coordinator
+      - delivery manager
     terms_he:
       - מנהל פרויקט
       - מנהל מוצר
       - מנהל פרויקטים טכנולוגיים
+      - מוביל פרויקטים טכנולוגיים
+      - מנהל פרויקטים מערכות מידע
+      - מנהל פרויקטי מערכות מידע
+      - מנהל פרויקטים IT
+      - מנהל פרויקטים דיגיטליים
+      - רכז פרויקטים
     terms_en:
       - product manager
       - project manager
       - technical program manager
+      - IT project manager
       - PMO
 
   strategy_public:
