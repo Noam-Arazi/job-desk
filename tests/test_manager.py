@@ -2354,7 +2354,8 @@ def _morning(tmp_path, *, hang: str, inner_clock: str = "100"):
         "DESK_TAILOR_TIMEOUT_SECONDS": inner_clock,
     }
     done = subprocess.run(
-        ["/bin/sh", str(PLIST.parent / "run-digest.sh")],
+        # macOS /bin/sh is bash in POSIX mode. CI's is dash, which is not what runs.
+        ["bash", "--posix", str(PLIST.parent / "run-digest.sh")],
         env=env,
         capture_output=True,
         text=True,
