@@ -4,7 +4,7 @@
   The morning pass, at 04:00 (06:00 until 01.11.2026), from spec/search.yaml digest.schedule.
 
     cron: "0 4 * * *"      ->  StartCalendarInterval Hour 4, Minute 0
-    timeout_seconds: 10800 ->  DESK_TIMEOUT_SECONDS, enforced by run-digest.sh
+    timeout_seconds: 14400 ->  DESK_TIMEOUT_SECONDS, enforced by run-digest.sh
 
   Why the timeout is not a launchd key: there isn't one. ExitTimeOut is the
   grace period launchd allows between SIGTERM and SIGKILL when it is already
@@ -63,7 +63,9 @@
         <string>/Users/noamarazi/job-desk</string>
         <!-- The explicit wall-clock ceiling. The wrapper refuses to run without it. -->
         <key>DESK_TIMEOUT_SECONDS</key>
-        <string>10800</string>
+        <string>14400</string>
+        <key>DESK_DELIVERY_RESERVE_SECONDS</key>
+        <string>1800</string>
 
         <!-- Live judgements, not replayed cassettes. -->
         <key>DESK_ENGINE</key>
@@ -106,7 +108,7 @@
 
     <!-- Grace period after launchd asks the job to stop. Not a run-time limit. -->
     <key>ExitTimeOut</key>
-    <integer>10800</integer>
+    <integer>14400</integer>
 
     <!-- A digest is not a daemon. It runs, it prints, it exits. -->
     <key>RunAtLoad</key>

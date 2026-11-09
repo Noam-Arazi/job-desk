@@ -716,7 +716,11 @@ digest:
     # a 7200s ceiling. Noam's call to keep 06:00 and widen the window instead
     # of starting earlier, so the worst morning delivers at 08:00 and a normal
     # one long before that.
-    timeout_seconds: 10800         # explicit — Power Nap hangs untimed jobs
+    # 09.11.2026 — the pass stops at timeout minus the reserve (07:30) and the
+    # delivery runs after it on its own clock, so a slow morning arrives late
+    # and thin instead of not arriving. 10800 left the analyst six minutes.
+    timeout_seconds: 14400         # explicit — Power Nap hangs untimed jobs
+    delivery_reserve_seconds: 1800
 
 # ---------------------------------------------------------------------------
 # analyst — session 5

@@ -76,6 +76,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
+from ..gates.seniority import title_is_blocked
 from . import http
 from .base import Fetcher, RawPosting, SiteResult, search_terms
 
@@ -453,7 +454,11 @@ def crawl(
             stops.append(f"{term!r}: hit the {max_pages}-offset ceiling")
 
     if with_details:
-        wanted = [p for p in found.values() if not p.body and p.external_id not in known]
+        wanted = [
+            p
+            for p in found.values()
+            if not p.body and p.external_id not in known and not title_is_blocked(p.title, spec)
+        ]
         # The budget is spent on the postings a title already places in a
         # direction Noam is pursuing, and only then on the rest. Scan order
         # used to decide it, and most of the 200 went to roles no family wants.

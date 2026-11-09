@@ -34,6 +34,19 @@ fail_unset() {
 [ -n "${DESK_ANALYZE_TIMEOUT_SECONDS:-}" ] || fail_unset DESK_ANALYZE_TIMEOUT_SECONDS
 [ -n "${DESK_TAILOR_BUDGET_USD:-}" ]  || fail_unset DESK_TAILOR_BUDGET_USD
 [ -n "${DESK_TAILOR_TIMEOUT_SECONDS:-}" ] || fail_unset DESK_TAILOR_TIMEOUT_SECONDS
+[ -n "${DESK_DELIVERY_RESERVE_SECONDS:-}" ] || fail_unset DESK_DELIVERY_RESERVE_SECONDS
+
+pass_limit=$((DESK_TIMEOUT_SECONDS - DESK_DELIVERY_RESERVE_SECONDS))
+if [ "$pass_limit" -le 0 ]; then
+    echo "DESK_DELIVERY_RESERVE_SECONDS leaves the morning pass no time." >&2
+    exit 78
+fi
+
+# One line per step with the clock on it. On 09.11.2026 the log could not say
+# which step had eaten the morning, because nothing in it carried the time.
+stage() {
+    echo "stage    $1   $(date '+%H:%M:%S')"
+}
 
 DESK_HOME="${DESK_HOME:-$(cd "$(dirname "$0")/../.." && pwd)}"
 export DESK_HOME
@@ -88,6 +101,7 @@ set -m
     # is judged. It used to be imported only when someone remembered, and the
     # digest offered back BDO, Linnovate and Nogamy after they had been sent.
     # A tracker that cannot be read costs the blocklist a day, not the run.
+    stage import
     "$UV" run --directory "$DESK_HOME" desk import-applications --write \
         || echo "tracker import failed; yesterday's blocklist stands" >&2
 
@@ -96,6 +110,7 @@ set -m
     for site in $runnable; do
         # A board that is down, rate-limiting or newly re-laid-out must not cost
         # the morning its other four sources. It is recorded and the pass goes on.
+        stage "fetch $site"
         if ! "$UV" run --directory "$DESK_HOME" desk fetch --site "$site" --write; then
             echo "fetch $site failed; continuing with the rest" >&2
             status=1
@@ -107,6 +122,7 @@ set -m
     # sat at 8 and 9 in the digest, once from alljobs and once from jobify.
     # Arithmetic only, no judge, and only the last two weeks — the digest shows
     # one. A failed pass costs the merges of a day, not the delivery.
+    stage resolve
     "$UV" run --directory "$DESK_HOME" desk resolve --since-days 14 --show 0 --write \
         || echo "resolve failed; the digest may show a job twice" >&2
 
@@ -125,6 +141,7 @@ set -m
     # It wrote in one transaction at the end until 26.08.2026, and the kill
     # below threw that transaction away every morning: the run spent its budget
     # and stored a single row on 24, 25 and 26 August.
+    stage analyze
     "$UV" run --directory "$DESK_HOME" desk analyze \
         --engine "$DESK_ENGINE" \
         --budget "$DESK_ANALYZE_BUDGET_USD" \
@@ -159,6 +176,7 @@ set -m
     # delivery. A morning that arrives with one CV missing is a good morning.
     # A morning that arrives with nothing is indistinguishable from a morning
     # with no matches.
+    stage tailor
     "$UV" run --directory "$DESK_HOME" desk tailor --approved \
         --engine "$DESK_ENGINE" \
         --budget "$DESK_TAILOR_BUDGET_USD" \
@@ -180,22 +198,19 @@ set -m
     }
     kill "$cutter_clock" 2>/dev/null
 
-    # --send, since 19.08.2026. Telegram is on in the spec and the credentials
-    # are in .env, which `desk` reads for itself — launchd cannot export them,
-    # and a scheduled run that quietly lost its channel is the exact failure
-    # delivery.py refuses. Into a disabled or unconfigured channel this is a
-    # hard error, never a silent print, so a broken token fails on day one
-    # instead of looking like a week of empty mornings.
-    "$UV" run --directory "$DESK_HOME" desk digest --format telegram --send --check-open || exit 1
-
     exit "$status"
 ) &
 job=$!
 
+# The delivery is outside the group the watchdog stops. Until 09.11.2026 it was
+# the last step inside it, so a slow morning killed the one step Noam sees:
+# fetch and the resolver ran until 06:24, the watchdog fired at 07:00 during the
+# analyst, and no message went out at all. Everything the steps above finished
+# is already in the store; a digest over it beats silence.
 (
-    sleep "$DESK_TIMEOUT_SECONDS"
+    sleep "$pass_limit"
     kill -TERM -"$job" 2>/dev/null && {
-        echo "the morning pass exceeded ${DESK_TIMEOUT_SECONDS}s and was stopped" >&2
+        echo "the morning pass exceeded ${pass_limit}s and was stopped; delivering what it finished" >&2
         sleep 10
         kill -KILL -"$job" 2>/dev/null
     }
@@ -204,5 +219,57 @@ watchdog=$!
 
 wait "$job"
 status=$?
-kill "$watchdog" 2>/dev/null
+
+interrupted=""
+if [ "$status" -ge 128 ]; then
+    interrupted="--pass-cut"
+    # Let the KILL land: a fetch finishing up after TERM must not share the
+    # store with the delivery.
+    wait "$watchdog"
+else
+    kill -TERM -"$watchdog" 2>/dev/null
+fi
+
+# --send, since 19.08.2026. Telegram is on in the spec and the credentials
+# are in .env, which `desk` reads for itself — launchd cannot export them,
+# and a scheduled run that quietly lost its channel is the exact failure
+# delivery.py refuses. Into a disabled or unconfigured channel this is a
+# hard error, never a silent print, so a broken token fails on day one
+# instead of looking like a week of empty mornings.
+deliver() {
+    limit=$1
+    shift
+    "$UV" run --directory "$DESK_HOME" desk digest --format telegram --send $interrupted "$@" &
+    sender=$!
+    (
+        sleep "$limit"
+        kill -TERM -"$sender" 2>/dev/null && {
+            echo "the delivery exceeded ${limit}s and was stopped" >&2
+            sleep 5
+            kill -KILL -"$sender" 2>/dev/null
+        }
+    ) &
+    sender_clock=$!
+    wait "$sender"
+    sent=$?
+    kill -TERM -"$sender_clock" 2>/dev/null
+    return "$sent"
+}
+
+# Reading every item's page is the slow part of the delivery and depends on the
+# job-desk Chrome. If it hangs, the list goes out unchecked rather than not at
+# all. Only on a stop: a refused message is an error, and sending again would
+# not change that.
+stage delivery
+without_check=$((DESK_DELIVERY_RESERVE_SECONDS / 5))
+deliver "$((DESK_DELIVERY_RESERVE_SECONDS - without_check))" --check-open
+sent=$?
+if [ "$sent" -ge 128 ]; then
+    echo "delivering without the open-posting check" >&2
+    deliver "$without_check"
+    sent=$?
+fi
+
+stage done
+[ "$sent" -eq 0 ] || exit "$sent"
 exit "$status"

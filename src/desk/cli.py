@@ -178,6 +178,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     """
     from datetime import datetime, timedelta
 
+    from .gates.seniority import title_is_blocked
     from .resolve import DUPLICATE, UNCERTAIN
     from .resolve import resolve as resolve_duplicates
 
@@ -200,6 +201,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
         ctx = build_context(RunSettings(budget_usd=args.budget))
         judge = gateway_judge(ctx.gateway, ctx)
+
+    # A title the seniority gate blocks is never shown, so finding its twin buys
+    # nothing: 44% of the pairs on 09.11.2026.
+    spec = load_spec()
+    before = len(rows)
+    rows = [r for r in rows if not title_is_blocked(str(r.get("title", "")), spec)]
+    print(f"skipped  {before - len(rows)} postings the title gate already blocks")
 
     result = resolve_duplicates(rows, judge=judge)
     summary = result.summary()
@@ -746,6 +754,11 @@ def build_parser() -> argparse.ArgumentParser:
     digest.add_argument("--send", action="store_true", help="deliver it; off by default")
     digest.add_argument(
         "--check-open", action="store_true", help="read each item's page and drop closed jobs"
+    )
+    digest.add_argument(
+        "--pass-cut",
+        action="store_true",
+        help="the morning pass was stopped early; say how many postings are still unread",
     )
     digest.add_argument("--format", choices=("text", "telegram", "json"), default="text")
     digest.set_defaults(func=cmd_digest)

@@ -26,6 +26,7 @@ import re
 from datetime import datetime
 from typing import Any
 
+from ..gates.seniority import title_is_blocked
 from . import http
 from .base import Fetcher, RawPosting, SiteResult
 from .linkedin import in_direction
@@ -222,7 +223,11 @@ def crawl(
                 matched[key] = []
             matched[key].append(slug)
 
-    wanted = [p for p in found.values() if p.external_id not in known]
+    wanted = [
+        p
+        for p in found.values()
+        if p.external_id not in known and not title_is_blocked(p.title, spec)
+    ]
     wanted.sort(key=lambda p: not in_direction(p.title, spec))
     for posting in wanted[:budget]:
         try:

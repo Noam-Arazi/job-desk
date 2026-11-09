@@ -2301,3 +2301,97 @@ def test_the_sent_button_is_read_as_its_own_action(store):
     from desk.manager import inbox
 
     assert inbox.read(applied_press("fp0"), chat_id="12345").action == inbox.APPLIED
+
+
+# ---------------------------------------------------------------------------
+# 09.11.2026 — the delivery is outside the group the watchdog stops
+# ---------------------------------------------------------------------------
+
+
+def test_the_reserve_is_the_spec_number_and_leaves_the_pass_time() -> None:
+    schedule = load_spec()["digest"]["schedule"]
+    env = plist()["EnvironmentVariables"]
+    reserve = int(schedule["delivery_reserve_seconds"])
+    assert env["DESK_DELIVERY_RESERVE_SECONDS"] == str(reserve)
+    assert 0 < reserve < int(env["DESK_TIMEOUT_SECONDS"])
+
+
+def _morning(tmp_path, *, hang: str, inner_clock: str = "100"):
+    """The real wrapper over a stub `uv`; `hang` names the step that never ends."""
+    import stat
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls.log"
+    stub = bin_dir / "uv"
+    stub.write_text(
+        "#!/bin/sh\n"
+        f'echo "$*" >> "{calls}"\n'
+        'case "$*" in\n'
+        '  *"run --directory"*" python -"*) cat >/dev/null; echo alljobs; echo; exit 0;;\n'
+        f'  *"{hang}"*) exec sleep 120;;\n'
+        "esac\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    chrome = tmp_path / "deploy" / "browser" / "start-chrome.sh"
+    chrome.parent.mkdir(parents=True)
+    chrome.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    chrome.chmod(chrome.stat().st_mode | stat.S_IEXEC)
+    env = {
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "HOME": str(tmp_path),
+        "DESK_HOME": str(tmp_path),
+        "DESK_TIMEOUT_SECONDS": "16",
+        "DESK_DELIVERY_RESERVE_SECONDS": "10",
+        "DESK_ENGINE": "stub",
+        "DESK_ANALYZE_BUDGET_USD": "1",
+        "DESK_ANALYZE_LIMIT": "1",
+        "DESK_ANALYZE_TIMEOUT_SECONDS": inner_clock,
+        "DESK_TAILOR_BUDGET_USD": "1",
+        "DESK_TAILOR_TIMEOUT_SECONDS": inner_clock,
+    }
+    done = subprocess.run(
+        ["/bin/sh", str(PLIST.parent / "run-digest.sh")],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    return done, calls.read_text(encoding="utf-8").splitlines()
+
+
+def test_a_morning_that_overruns_still_delivers_and_says_it_was_cut(tmp_path) -> None:
+    """09.11.2026: the watchdog fired during the analyst and no message went out."""
+    done, calls = _morning(tmp_path, hang="desk analyze")
+    digests = [c for c in calls if "desk digest" in c]
+    assert len(digests) == 1
+    assert "--send" in digests[0]
+    assert "--pass-cut" in digests[0]
+    assert "--check-open" in digests[0]
+    assert done.returncode >= 128
+    assert "stage    analyze" in done.stdout
+
+
+def test_a_hung_open_check_still_sends_the_list_unchecked(tmp_path) -> None:
+    done, calls = _morning(tmp_path, hang="--check-open", inner_clock="3")
+    digests = [c for c in calls if "desk digest" in c]
+    assert len(digests) == 2
+    assert "--check-open" in digests[0]
+    assert "--check-open" not in digests[1]
+    assert "--send" in digests[1]
+    assert "--pass-cut" not in digests[1]
+
+
+def test_the_cut_line_sits_above_the_postings_and_is_absent_otherwise() -> None:
+    from desk.manager.digest import Digest
+    from desk.manager.render import render as render_digest
+
+    base = {"date": "2026-11-09", "items": [], "follow_ups": [], "closed": [],
+            "min_score": 0.6, "max_items": 10, "considered": 0}
+    cut = render_digest(Digest(**base, unread_after_cut=378), "telegram")
+    assert "378" in cut.splitlines()[1]
+    assert "נקטעה" in cut
+    assert "נקטעה" not in render_digest(Digest(**base), "telegram")

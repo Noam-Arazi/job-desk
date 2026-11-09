@@ -71,6 +71,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
     try:
         # Found, reported, delivered, and only then written. See the note above.
         closing = timers.pending(store, now=now, spec=spec)
+        unread_after_cut = _unread(store, spec) if getattr(args, "pass_cut", False) else None
 
         def build() -> digest_module.Digest:
             return digest_module.build(
@@ -81,6 +82,7 @@ def cmd_digest(args: argparse.Namespace) -> int:
                 min_score=args.min_score,
                 closed=closing,
                 tracker=tracker,
+                unread_after_cut=unread_after_cut,
             )
 
         if getattr(args, "check_open", False):
@@ -103,6 +105,14 @@ def cmd_digest(args: argparse.Namespace) -> int:
     finally:
         store.close()
     return 0
+
+
+def _unread(store: Store, spec: dict) -> int:
+    """Postings still waiting for the analyst, minus the titles it would refuse."""
+    from ..gates.seniority import title_is_blocked
+
+    waiting = store.unanalysed_postings(limit=None)
+    return sum(not title_is_blocked(str(row.get("title", "")), spec) for row in waiting)
 
 
 def _drop_closed(store: Store, build, *, spec: dict, now: datetime) -> digest_module.Digest:

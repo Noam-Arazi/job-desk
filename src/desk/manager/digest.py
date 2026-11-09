@@ -147,6 +147,9 @@ class Digest:
     # read. None when nobody asked — a page behind the "more" button, a test —
     # which renders as nothing rather than as a tracker that failed.
     tracker: Any = None
+    # How many postings a stopped morning pass left unread, not counting titles
+    # the gate would refuse anyway. None on a morning that ran to the end.
+    unread_after_cut: int | None = None
 
     @property
     def empty(self) -> bool:
@@ -165,6 +168,7 @@ class Digest:
             "remaining": self.remaining,
             "arrivals": self.arrivals,
             "tracker": self.tracker.as_dict() if self.tracker is not None else None,
+            "unread_after_cut": self.unread_after_cut,
             "suppressed": dict(sorted(self.suppressed.items())),
             # Stated in the payload and not only in the prose, so a consumer of
             # the JSON reads the same guarantee a reader of the text does.
@@ -195,6 +199,7 @@ def build(
     closed: tuple[str, ...] = (),
     offset: int = 0,
     tracker: Any = None,
+    unread_after_cut: int | None = None,
 ) -> Digest:
     """Assemble today's digest from the store.
 
@@ -305,6 +310,7 @@ def build(
         remaining=max(0, len(ranked) - start - window),
         arrivals=store.first_seen_on(now.date().isoformat()),
         tracker=tracker,
+        unread_after_cut=unread_after_cut,
     )
 
 

@@ -397,6 +397,34 @@ def test_a_body_already_stored_is_not_asked_for_again() -> None:
     assert "/jobs/view/" in browser.urls[0]
 
 
+def test_a_title_the_gate_blocks_never_costs_a_page() -> None:
+    """09.11.2026 — a senior title used to spend a browser load the gate then threw away."""
+    import copy
+
+    class Counting:
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def get(self, url: str) -> str:
+            self.urls.append(url)
+            return "<div class='show-more-less-html__markup'>x</div>"
+
+    search = FixtureFetcher({"start=0": FIXTURE, "start=10": EMPTY})
+    spec = copy.deepcopy(load_spec())
+    spec["gates"]["seniority"]["title_block_terms"] = []
+    allowed = Counting()
+    linkedin.crawl(search, spec=spec, terms=["data analyst"], max_pages=1, detail_fetcher=allowed)
+    assert allowed.urls
+
+    spec["gates"]["seniority"]["title_block_terms"] = ["data analyst"]
+    blocked = Counting()
+    result = linkedin.crawl(
+        search, spec=spec, terms=["data analyst"], max_pages=1, detail_fetcher=blocked
+    )
+    assert blocked.urls == []
+    assert result.postings  # the card is kept; only the page is saved
+
+
 class _RateLimited:
     """Serves the fixture, and a 429 for every URL matching `limited` — the
     first `times` requests to it only, or always when `times` is None."""

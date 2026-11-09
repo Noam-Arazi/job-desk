@@ -111,6 +111,22 @@ def years_required(text: str, *, range_rule: str = "use_lower_bound") -> list[tu
     return sorted(found, key=lambda f: f[1])
 
 
+def title_is_blocked(title: str, spec: Mapping[str, Any]) -> bool:
+    """Whether the title alone already decides this gate. Free, and needs no body.
+
+    09.11.2026 — the gate runs in the analyst, the last step before the model,
+    so a posting titled senior had already cost a browser page and a place in
+    the duplicate comparison: 16% of the postings and 44% of the pairs, for
+    roles nothing downstream would ever show. The steps before the analyst ask
+    this instead, so the words stay in one list in the spec.
+    """
+    rules = ((spec.get("gates") or {}).get("seniority")) or {}
+    if str(rules.get("mode", "block")) != "block":
+        return False
+    text = readable(title)
+    return any(_title_term(str(term)).search(text) for term in rules.get("title_block_terms") or ())
+
+
 def check(
     *,
     spec: Mapping[str, Any],
@@ -128,6 +144,7 @@ def check(
     unstated = str(rules.get("unstated", "pass"))
 
     # 28.10.2026 — the title outranks every number. Noam: a posting titled
+    # (`title_is_blocked` asks the same question before a page is read.)
     # senior is not worth his time or the tokens, whatever the body says. Most
     # of them state no years at all, so the year rules below let them through
     # on silence and the model paid to score them — 27 were scored, five

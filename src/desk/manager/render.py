@@ -59,7 +59,7 @@ _CLOSED_HE = "נסגר מעצמו אחרי חלון הקיפאון שבמפרט"
 
 def as_text(digest: Digest) -> str:
     """The terminal rendering. Wide, unabbreviated, every verdict visible."""
-    lines: list[str] = [f"job-desk digest   {digest.date}"]
+    lines: list[str] = [f"job-desk digest   {digest.date}", *_pass_cut(digest)]
     lines += _tracker(digest, reason=True)
     lines.append(_headline(digest))
     if digest.suppressed:
@@ -103,7 +103,12 @@ def as_telegram(digest: Digest) -> str:
     because a posting had an underscore in it is a worse outcome than a message
     without bold text.
     """
-    lines: list[str] = [f"job-desk  {digest.date}", *_tracker(digest), _headline(digest)]
+    lines: list[str] = [
+        f"job-desk  {digest.date}",
+        *_pass_cut(digest),
+        *_tracker(digest),
+        _headline(digest),
+    ]
     # Above the postings, not below them. A warning that the scan failed is
     # worth more than the stale shortlist under it, and anything printed after
     # five jobs and their links is a line Noam scrolls past.
@@ -245,6 +250,13 @@ def _headline(digest: Digest) -> str:
         f"   floor {digest.min_score:.2f}   ceiling {digest.max_items}"
     )
     return line + (f"   {digest.remaining} below" if digest.remaining else "")
+
+
+def _pass_cut(digest: Digest) -> list[str]:
+    """A stopped pass still delivers. It must not read like a normal morning."""
+    if digest.unread_after_cut is None:
+        return []
+    return [f"⚠️ ריצת הבוקר נקטעה לפני סוף הניתוח. {digest.unread_after_cut} משרות עדיין בתור"]
 
 
 def _tracker(digest: Digest, *, reason: bool = False) -> list[str]:

@@ -403,3 +403,15 @@ def test_a_judge_whose_model_errors_says_different_rather_than_crashing() -> Non
         left="a", right="b", core=1.0, body=0.5, company=True, score=0.7, band="uncertain"
     )
     assert judge(left, right, score) is False
+
+
+def test_the_title_gate_can_be_asked_before_a_page_is_read() -> None:
+    from desk.config import load_spec
+    from desk.gates.seniority import title_is_blocked
+
+    spec = load_spec()
+    assert title_is_blocked("Senior Data Analyst", spec)
+    assert title_is_blocked("אנליסט בכיר", spec)
+    assert not title_is_blocked("Data Analyst", spec)
+    assert not title_is_blocked("Product Manager", spec)
+    assert not title_is_blocked("Data Analyst", {})
