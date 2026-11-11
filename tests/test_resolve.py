@@ -415,3 +415,20 @@ def test_the_title_gate_can_be_asked_before_a_page_is_read() -> None:
     assert not title_is_blocked("Data Analyst", spec)
     assert not title_is_blocked("Product Manager", spec)
     assert not title_is_blocked("Data Analyst", {})
+
+
+def test_merged_groups_are_read_once_and_follow_new_links(ctx) -> None:
+    """11.11.2026: the digest recomputed every group per item and missed its send."""
+    ctx.store.record_link("a", "b", score=0.9, band=DUPLICATE, method="deterministic", now="t")
+    ctx.store.record_link("x", "y", score=0.1, band=DISTINCT, method="deterministic", now="t")
+
+    queries: list[str] = []
+    ctx.store.conn.set_trace_callback(queries.append)
+    assert sorted(ctx.store.merged_with("a")) == ["a", "b"]
+    assert ctx.store.merged_with("x") == ["x"]
+    assert sorted(ctx.store.merged_with("b")) == ["a", "b"]
+    ctx.store.conn.set_trace_callback(None)
+    assert sum("duplicate_links" in q for q in queries) == 1
+
+    ctx.store.record_links([("b", "c", 0.9, DUPLICATE, "deterministic")], now="t")
+    assert sorted(ctx.store.merged_with("c")) == ["a", "b", "c"]

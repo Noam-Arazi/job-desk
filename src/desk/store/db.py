@@ -101,6 +101,9 @@ CREATE TABLE IF NOT EXISTS duplicate_links (
     PRIMARY KEY (left_fp, right_fp)
 );
 CREATE INDEX IF NOT EXISTS links_left ON duplicate_links(left_fp);
+-- The digest reads only the merges, ~0.1% of the table; without this every
+-- read scanned millions of `distinct` verdicts (11.11.2026: no digest sent).
+CREATE INDEX IF NOT EXISTS links_band ON duplicate_links(band);
 
 CREATE TABLE IF NOT EXISTS labels (
     fingerprint  TEXT PRIMARY KEY,
@@ -194,6 +197,9 @@ class Store:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
+        # fingerprint -> its merged group; built on first use, dropped on any
+        # write to duplicate_links. See merged_with.
+        self._groups: dict[str, list[str]] | None = None
         self.conn.executescript(SCHEMA)
         self._migrate()
 
@@ -493,6 +499,7 @@ class Store:
         paid for is the line item that makes the escalation rate measurable.
         """
         a, b = (left, right) if left <= right else (right, left)
+        self._groups = None
         with self.tx() as c:
             c.execute(
                 "INSERT OR REPLACE INTO duplicate_links(left_fp, right_fp, score, band,"
@@ -508,6 +515,7 @@ class Store:
             (*sorted((left, right)), score, band, method, now)
             for left, right, score, band, method in verdicts
         ]
+        self._groups = None
         with self.tx() as c:
             c.executemany(
                 "INSERT OR REPLACE INTO duplicate_links(left_fp, right_fp, score, band,"
@@ -529,15 +537,24 @@ class Store:
 
         Includes the fingerprint itself, so a role that matched nothing returns
         a list of one and a caller needs no special case for it.
+
+        The groups are computed once and reused until a link is written: the
+        digest asks this for every item and for every applied check, and on
+        11.11.2026 recomputing it each time made the build outlast the
+        delivery's clock.
         """
         from ..resolve.resolver import cluster
 
-        pairs = [(r["left_fp"], r["right_fp"]) for r in self.links("duplicate")]
-        keys = {k for pair in pairs for k in pair} | {fingerprint}
-        for group in cluster(keys, pairs):
-            if fingerprint in group:
-                return group
-        return [fingerprint]
+        if self._groups is None:
+            pairs = [
+                (r["left_fp"], r["right_fp"])
+                for r in self.conn.execute(
+                    "SELECT left_fp, right_fp FROM duplicate_links WHERE band = 'duplicate'"
+                )
+            ]
+            keys = {k for pair in pairs for k in pair}
+            self._groups = {k: group for group in cluster(keys, pairs) for k in group}
+        return list(self._groups.get(fingerprint, [fingerprint]))
 
     def first_seen(self, fingerprint: str) -> str | None:
         row = self.conn.execute(
@@ -753,6 +770,7 @@ class Store:
                 "DELETE FROM duplicate_links WHERE left_fp = ? OR right_fp = ?",
                 (fingerprint, fingerprint),
             )
+            self._groups = None
             c.execute("DELETE FROM postings WHERE fingerprint = ?", (fingerprint,))
             c.execute("DELETE FROM fingerprints WHERE fingerprint = ?", (fingerprint,))
         return True
