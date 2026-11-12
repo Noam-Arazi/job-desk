@@ -307,10 +307,57 @@ def repair_addresses(changeset: ChangeSet, base: Base) -> ChangeSet:
                     change = replace(change, section=owners.pop())
         else:
             line = base.line(change.section)
+            if line is None:
+                line = _line_quoted_in_group(change, base)
+                if line is not None:
+                    change = replace(change, section=line.address)
             if line is not None and change.before != line.text:
                 change = replace(change, before=line.text)
         fixed.append(change)
     return replace(changeset, changes=tuple(fixed))
+
+
+def _line_quoted_in_group(change: Change, base: Base) -> Any:
+    """The one line of a group that a group-addressed edit quotes, or None.
+
+    12.11.2026 — Grapa was refused twice, both times for `add_new_bullet` at
+    `skills`: the model edited one skills line and named the block (its group
+    id, or its heading) instead of `skills.N`. `before` says which line it
+    meant. Only an unambiguous answer is taken: an exact quote, else the one
+    line sharing a category label ("Data & BI:"), else the one line with clearly
+    the most words in common. Anything less stays a violation.
+    """
+    members = [
+        line
+        for line in base.lines
+        if line.group and change.section in (line.group, line.heading)
+    ]
+    if not members or not change.before.strip():
+        return None
+    quoted = normalize(change.before)
+    exact = [line for line in members if normalize(line.text) == quoted]
+    if len(exact) == 1:
+        return exact[0]
+    label = change.before.split(":", 1)[0].strip().lower() if ":" in change.before else ""
+    if label:
+        labelled = [
+            line for line in members if line.text.split(":", 1)[0].strip().lower() == label
+        ]
+        if len(labelled) == 1:
+            return labelled[0]
+    words = tokens(change.before)
+    if not words:
+        return None
+    scored = sorted(
+        ((len(words & tokens(line.text)) / len(words), line) for line in members),
+        key=lambda pair: pair[0],
+        reverse=True,
+    )
+    best, line = scored[0]
+    runner_up = scored[1][0] if len(scored) > 1 else 0.0
+    if best >= 0.6 and best - runner_up >= 0.25:
+        return line
+    return None
 
 
 def mechanical_only(violations: Sequence[Violation]) -> bool:

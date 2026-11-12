@@ -1481,6 +1481,44 @@ def test_a_misquoted_before_is_replaced_by_the_base_line(base):
     assert "claim_without_evidence" not in violations_of(base, *repaired.changes)
 
 
+def test_a_skills_edit_named_by_its_group_lands_on_the_quoted_line(base):
+    """12.11.2026: Grapa refused twice — an edit to one skills line addressed `skills`."""
+    address = next(line.address for line in base.lines if line.text == SKILL_TOOLS)
+    for section in ("skills", "Technical Skills"):
+        slipped = change(
+            op=cs.ADD_TERM_TO_EXISTING_LINE,
+            section=section,
+            before=SKILL_TOOLS,
+            after=SKILL_TOOLS + ", zapier",
+        )
+        assert "add_new_bullet" in violations_of(base, slipped)
+        repaired = tl.repair_addresses(cs.ChangeSet(changes=(slipped,)), base)
+        assert repaired.changes[0].section == address
+        assert "add_new_bullet" not in violations_of(base, *repaired.changes)
+
+
+def test_a_group_addressed_edit_by_label_alone_finds_its_line(base):
+    address = next(line.address for line in base.lines if line.text == SKILL_DATA)
+    paraphrased = change(
+        op=cs.ADD_TERM_TO_EXISTING_LINE,
+        section="skills",
+        before="Data: SQL and Python",
+        after=SKILL_DATA + ", excel",
+    )
+    repaired = tl.repair_addresses(cs.ChangeSet(changes=(paraphrased,)), base)
+    assert repaired.changes[0].section == address
+    assert repaired.changes[0].before == SKILL_DATA
+
+
+def test_a_group_addressed_edit_quoting_nothing_is_left_for_the_contract(base):
+    vague = change(
+        op=cs.ADD_TERM_TO_EXISTING_LINE, section="skills", before="", after="Zapier"
+    )
+    repaired = tl.repair_addresses(cs.ChangeSet(changes=(vague,)), base)
+    assert repaired.changes[0].section == "skills"
+    assert "add_new_bullet" in violations_of(base, *repaired.changes)
+
+
 def test_an_english_advert_inside_a_hebrew_jobify_frame_is_english():
     from desk.tailor.command import posting_is_english
 
