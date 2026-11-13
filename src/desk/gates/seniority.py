@@ -40,9 +40,11 @@ _UNIT = r"(?:שנ(?:ים|ות|ה)|years?|yrs?)"
 
 # Ordered: the range must be tried before the bare number, or "3-5 שנים" reads
 # as a flat 3 and the range rule never runs.
-_RANGE = re.compile(rf"(\d{{1,2}})\s*-\s*(\d{{1,2}})\s*\+?\s*{_UNIT}")
-_PLUS = re.compile(rf"(\d{{1,2}})\s*\+\s*{_UNIT}")
-_DIGITS = re.compile(rf"(\d{{1,2}})\s*{_UNIT}")
+# `(?<!\d)`: "over 125 years of in-house recruiting" read as a 25-year bar
+# (13.11.2026), because a two-digit pattern happily starts mid-number.
+_RANGE = re.compile(rf"(?<!\d)(\d{{1,2}})\s*-\s*(\d{{1,2}})\s*\+?\s*{_UNIT}")
+_PLUS = re.compile(rf"(?<!\d)(\d{{1,2}})\s*\+\s*{_UNIT}")
+_DIGITS = re.compile(rf"(?<!\d)(\d{{1,2}})\s*{_UNIT}")
 
 # Spelled-out years, and the two rules the store forced on them.
 #
@@ -74,6 +76,41 @@ _WORDS = re.compile(rf"(?<![א-ת])(?:{_WORD_ALONE}|(?:{_WORD_WITH_UNIT})\s+{_UN
 _ROLE_TAIL = re.compile(r"\s*(?:of|in|as|at|working|hands-on|building|delivering|leading)\b")
 
 _SCHOOLING = re.compile(r"\s*(?:לימוד|לימודים|schooling|education)")
+
+# 13.11.2026 — the company's own history, read as the candidate's bar. "With
+# over 40 years of semiconductor process control", "מתבסס על מעל 30 שנות
+# ניסיון בכלל תחומי החלל", "who brings over 20 years": the experience word is
+# right there, so the proximity test passes it, and under `use_highest` it then
+# outranks the real "2+ years" further down. Over two weeks it blocked dozens of
+# postings, several repeatedly. Requirements are phrased as demands ("at least",
+# "לפחות", a bare "3+ years"); boasts are phrased as possession, and the
+# possession phrasing is narrow enough to list.
+_BOAST_LEAD = re.compile(
+    r"(?:"
+    r"with\s+(?:over|more\s+than|nearly|almost)"
+    # "brings", never "bring": "what you bring 5+ years" is the demand itself.
+    r"|brings\s+(?:over|more\s+than|nearly)?"
+    r"|we\s+bring\s+(?:over|more\s+than)"
+    r"|builds?\s+on\s+(?:over\s+|more\s+than\s+)?"
+    r"|going\s+back\s+(?:over\s+|more\s+than\s+)?"
+    r"|comes\s+with"
+    r"|עם\s+למעלה\s+מ-?"
+    r"|עם\s+ניסיון\s+של\s+(?:מעל|למעלה\s+מ-?)"
+    r"|מתבסס(?:ת)?\s+על\s+(?:מעל\s+|למעלה\s+מ-?)?"
+    r"|מלאו"
+    r"|גיל"
+    r")\s*$"
+)
+_BOAST_TAIL = re.compile(
+    r"\s*(?:of\s+(?:success|being|presence|history|innovation|leadership\s+in)|in\s+the\s+industry)\b"
+)
+
+
+def _is_boast(text: str, start: int, end: int) -> bool:
+    """Whether a year figure describes the company (or an age), not a demand."""
+    return bool(_BOAST_LEAD.search(text[max(0, start - 40) : start])) or bool(
+        _BOAST_TAIL.match(text, end)
+    )
 
 
 def years_required(text: str, *, range_rule: str = "use_lower_bound") -> list[tuple[int, int, int]]:
@@ -175,8 +212,15 @@ def check(
 
     text = readable(title, body)
     figures = years_required(text, range_rule=range_rule)
+    # A figure above `max_plausible_years` is the company's age read as a bar:
+    # nobody the spec would ever show is asked for 25 years.
+    plausible = int(rules.get("max_plausible_years", 20))
     anchored = [
-        f for f in figures if near(text, f[1], _EXPERIENCE_WORDS) or _ROLE_TAIL.match(text, f[2])
+        f
+        for f in figures
+        if (near(text, f[1], _EXPERIENCE_WORDS) or _ROLE_TAIL.match(text, f[2]))
+        and not _is_boast(text, f[1], f[2])
+        and f[0] <= plausible
     ]
 
     if not anchored:

@@ -311,6 +311,11 @@ gates:
     # blocks costs more than one posting: it teaches the reader the gate means
     # nothing.
     multiple_rule: use_highest     # switch to use_lowest for the old behaviour
+    # 13.11.2026 — "with over 40 years of experience" is the company, not the
+    # candidate. A figure above this is never read as a requirement; the
+    # possession phrasing ("with over", "brings", "מתבסס על") is filtered in
+    # the gate itself.
+    max_plausible_years: 20
     # 28.10.2026 — a title at one of these levels is blocked before any year
     # is read, and before any model call. Whole words only. Bare "lead" and
     # "manager" are deliberately absent: "AI Adoption Lead" and "Product

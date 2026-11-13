@@ -284,6 +284,47 @@ def test_a_year_count_that_is_not_about_experience_is_not_a_requirement(spec) ->
     assert not result.blocks
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        # 13.11.2026 — real bodies the gate blocked on the company's history.
+        "Our group/division with over 40 years of semiconductor process control. "
+        "Requirements: 2+ years of experience in Python.",
+        "התעשייה האווירית מתבססת על מעל 30 שנות ניסיון בכלל תחומי החלל. "
+        "דרישות: שנתיים ניסיון בניתוח נתונים",
+        "AudioCodes brings over 30 years of expertise in enterprise voice. "
+        "Requirements: 2+ years of experience in technical support.",
+        "Earnix builds on more than 25 years of experience in AI. "
+        "You bring 2 years of experience in analytics.",
+        "חברה טכנולוגית מתקדמת. עם למעלה מ-40 שנות ניסיון, אנו מציעים סביבה דינמית. "
+        "דרישות: ניסיון של שנה לפחות ב-Excel",
+        "Combined, we bring over 125 years of in-house recruiting experience. "
+        "2 years of experience in recruiting.",
+    ],
+)
+def test_the_companys_own_years_are_not_the_candidates_bar(spec, body) -> None:
+    """Under `use_highest` a company boast outranked the real requirement."""
+    result = seniority_check(spec, body=body)
+
+    assert not result.blocks, result.evidence
+
+
+@pytest.mark.parametrize(
+    "body, years",
+    [
+        ("What you bring 5+ years of hands-on experience in data.", 5),
+        ("You have: 6+ years in business or data analytics.", 6),
+        ("Requirements 15+ years in software engineering.", 15),
+        ("עם למעלה מ-40 שנות ניסיון בתעשייה. דרישות: לפחות 4 שנות ניסיון בניהול מוצר", 4),
+    ],
+)
+def test_a_demand_beside_a_boast_still_blocks(spec, body, years) -> None:
+    result = seniority_check(spec, body=body)
+
+    assert result.verdict is Verdict.BLOCK
+    assert result.details["years"] == years
+
+
 def test_the_highest_stated_figure_decides(spec) -> None:
     """Two demands are two things to satisfy, so the bar is the larger.
 
