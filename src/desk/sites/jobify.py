@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Any
 
 from ..gates.seniority import title_is_blocked
-from . import http
+from . import http, linkedin
 from .base import Fetcher, RawPosting, SiteResult
 from .linkedin import in_direction
 
@@ -41,6 +41,34 @@ READY = "[onclick*=selectLobbyRole], a.title[href*='/jobs/'], div.content-text-m
 
 _SHELF = re.compile(r"selectLobbyRole\('([^']+)'")
 _JOB_ID = re.compile(r"/jobs/([^/?#]+)")
+
+# An id ending in `-in` is a LinkedIn job id that Jobify mirrors (02.11.2026).
+# Some mirrors arrive with no description at all — 20 of 375 in the store on
+# 13.11.2026 — and a posting with no body passes the seniority gate on silence:
+# a Technical PM that LinkedIn itself marked 5+ years reached the digest as
+# `unknown`. Where both copies had a body, the gate agreed on every one of 305,
+# so the source is only asked when the mirror came back thin.
+_FROM_LINKEDIN = re.compile(r"^(\d+)-in$")
+THIN_BODY = 200
+
+
+def linkedin_source(
+    external_id: str, body: str, *, http_fetcher: Fetcher | None, browser: Fetcher
+) -> dict[str, str] | None:
+    """LinkedIn's own description and seniority band for a thin `-in` mirror."""
+    mirrored = _FROM_LINKEDIN.match(external_id)
+    if not mirrored or len(body.strip()) >= THIN_BODY:
+        return None
+    job_id = mirrored.group(1)
+    # The logged-out endpoint first: no browser wait, and it carries the
+    # criteria list. The signed-in page is the fallback when there is no HTTP.
+    if http_fetcher is not None:
+        detail = linkedin.parse_detail(http_fetcher.get(linkedin.detail_url(job_id)))
+    else:
+        detail = linkedin.parse_detail(browser.get(linkedin.view_url(job_id)))
+    if len(detail["body"].strip()) <= len(body.strip()):
+        return None
+    return detail
 
 
 def shelf_url(slug: str) -> str:
@@ -179,8 +207,10 @@ def crawl(
 ) -> SiteResult:
     """Every shelf, every card, and a description for the ones still missing one.
 
-    `fetcher` is the plain HTTP one every module receives and is not used: a
-    logged-out request gets the sign-in page. The browser is `detail_fetcher`.
+    `fetcher` is the plain HTTP one every module receives. Jobify itself is not
+    read through it — a logged-out request gets the sign-in page — only
+    LinkedIn's public page for a thin `-in` mirror. The browser is
+    `detail_fetcher`.
     """
     result = SiteResult(site=SITE)
     if detail_fetcher is None:
@@ -229,6 +259,7 @@ def crawl(
         if p.external_id not in known and not title_is_blocked(p.title, spec)
     ]
     wanted.sort(key=lambda p: not in_direction(p.title, spec))
+    thin_filled = 0
     for posting in wanted[:budget]:
         try:
             detail = parse_detail(browser.get(posting.url))
@@ -236,6 +267,18 @@ def crawl(
             result.errors.append(f"detail {posting.external_id}: {exc}")
             continue
         result.pages_fetched += 1
+        body, stated = detail["body"], ""
+        try:
+            source = linkedin_source(
+                posting.external_id, body, http_fetcher=fetcher, browser=browser
+            )
+        except Exception as exc:
+            source = None
+            result.errors.append(f"linkedin source of {posting.external_id}: {exc}")
+        if source is not None:
+            result.pages_fetched += 1
+            body, stated = source["body"], source["stated_experience"]
+            thin_filled += 1
         found[posting.external_id] = RawPosting(
             site=SITE,
             external_id=posting.external_id,
@@ -243,12 +286,15 @@ def crawl(
             company=detail["company"] or posting.company,
             location=detail["location"],
             url=posting.url,
-            body=detail["body"],
+            body=body,
+            stated_experience=stated,
         )
     if len(wanted) > budget:
         result.notes.append(
             f"{len(wanted) - budget} postings kept their card only: the detail ceiling is {budget}"
         )
+    if thin_filled:
+        result.notes.append(f"{thin_filled} thin LinkedIn mirrors read from LinkedIn itself")
     result.notes.append(f"{len(slugs)} shelves read; first seen {stamp}")
 
     result.postings = list(found.values())

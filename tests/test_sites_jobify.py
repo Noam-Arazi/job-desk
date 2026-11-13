@@ -126,3 +126,72 @@ def test_a_shelf_left_short_or_on_another_window_is_said_out_loud() -> None:
     assert any("25 of 31" in e for e in short.errors)
     assert any("window stayed 'last_visit'" in e for e in stuck.errors)
     assert short.postings and stuck.postings
+
+
+# 13.11.2026 — a LinkedIn mirror that arrives with no description passed the
+# seniority gate on silence. The source page is asked only for a thin mirror.
+
+LINKEDIN_DETAIL = """
+<div class="show-more-less-html__markup">About the role. Requirements: 5+ years of experience
+in product management, including hands-on work with technical teams and enterprise customers,
+roadmaps, discovery and delivery of complex platform features end to end across many teams.</div>
+<ul><li><h3 class="description__job-criteria-subheader">Seniority level</h3>
+<span class="description__job-criteria-text">Mid-Senior level</span></li></ul>
+"""
+
+MIRROR_SHELF = SHELF.replace("d8276eaefe2ea97b-id", "4481327179-in")
+EMPTY_DETAIL = '<p class="company-name">Unframe</p><div class="content-text-main"></div>'
+
+
+class MirrorPages(Pages):
+    def __init__(self, detail: str) -> None:
+        super().__init__()
+        self.detail = detail
+
+    def get(self, url: str) -> str:
+        if "/myjob-roles/" in url:
+            self.urls.append(url)
+            return MIRROR_SHELF
+        if "/jobs/4481327179-in" in url:
+            self.urls.append(url)
+            return self.detail
+        return super().get(url)
+
+
+class Http:
+    def __init__(self) -> None:
+        self.urls: list[str] = []
+
+    def get(self, url: str) -> str:
+        self.urls.append(url)
+        return LINKEDIN_DETAIL
+
+
+def test_a_thin_linkedin_mirror_takes_linkedins_own_description() -> None:
+    http = Http()
+    result = jobify.crawl(http, spec=load_spec(), detail_fetcher=MirrorPages(EMPTY_DETAIL))  # type: ignore[arg-type]
+
+    posting = result.postings[0]
+    assert http.urls == ["https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4481327179"]
+    assert "5+ years of experience" in posting.body
+    assert posting.stated_experience == "Mid-Senior level"
+
+
+def test_a_mirror_with_its_own_description_does_not_ask_linkedin() -> None:
+    http = Http()
+    full = DETAIL.replace("We build AI agents.", "We build AI agents. " * 20)
+    result = jobify.crawl(http, spec=load_spec(), detail_fetcher=MirrorPages(full))  # type: ignore[arg-type]
+
+    assert http.urls == []
+    assert result.postings[0].body.startswith("About The Role")
+
+
+def test_linkedin_failing_keeps_the_mirror_and_says_so() -> None:
+    class Down:
+        def get(self, url: str) -> str:
+            raise RuntimeError("429")
+
+    result = jobify.crawl(Down(), spec=load_spec(), detail_fetcher=MirrorPages(EMPTY_DETAIL))  # type: ignore[arg-type]
+
+    assert len(result.postings) == 1
+    assert any("linkedin source" in e for e in result.errors)
