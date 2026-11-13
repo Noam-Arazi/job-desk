@@ -19,7 +19,7 @@ runs rather than context budgeted inside one:
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -104,6 +104,16 @@ CREATE INDEX IF NOT EXISTS links_left ON duplicate_links(left_fp);
 -- The digest reads only the merges, ~0.1% of the table; without this every
 -- read scanned millions of `distinct` verdicts (11.11.2026: no digest sent).
 CREATE INDEX IF NOT EXISTS links_band ON duplicate_links(band);
+
+-- 13.11.2026 — which postings the resolver has already compared, and with
+-- what body. The morning pass compared every pair in a 14-day window again
+-- each day (~49 minutes, 3.9M rows rewritten); only pairs touching a posting
+-- that is new, or whose body changed, can carry a new verdict.
+CREATE TABLE IF NOT EXISTS resolved_postings (
+    posting_id   INTEGER PRIMARY KEY,
+    body_length  INTEGER NOT NULL,
+    resolved_at  TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS labels (
     fingerprint  TEXT PRIMARY KEY,
@@ -521,6 +531,20 @@ class Store:
                 "INSERT OR REPLACE INTO duplicate_links(left_fp, right_fp, score, band,"
                 " method, decided_at) VALUES (?,?,?,?,?,?)",
                 rows,
+            )
+
+    def resolved_bodies(self) -> dict[int, int]:
+        """posting id -> the body length it had when the resolver last compared it."""
+        rows = self.conn.execute("SELECT posting_id, body_length FROM resolved_postings")
+        return {int(r[0]): int(r[1]) for r in rows}
+
+    def mark_resolved(self, rows: Iterable[Mapping[str, Any]], *, now: str) -> None:
+        """Remember that these postings have been compared, as they stand now."""
+        with self.tx() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO resolved_postings(posting_id, body_length, resolved_at)"
+                " VALUES (?,?,?)",
+                [(int(r["id"]), len(str(r.get("body") or "")), now) for r in rows],
             )
 
     def links(self, band: str | None = None) -> list[dict[str, Any]]:

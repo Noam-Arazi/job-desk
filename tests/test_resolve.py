@@ -432,3 +432,35 @@ def test_merged_groups_are_read_once_and_follow_new_links(ctx) -> None:
 
     ctx.store.record_links([("b", "c", 0.9, DUPLICATE, "deterministic")], now="t")
     assert sorted(ctx.store.merged_with("c")) == ["a", "b", "c"]
+
+
+def test_a_pass_compares_only_pairs_that_touch_a_fresh_posting() -> None:
+    """13.11.2026 — the morning re-scored the same 14-day window every day."""
+    rows = [
+        posting("old1", "אנליסט נתונים", "גוף ראשון"),
+        posting("old2", "אנליסט נתונים", "גוף שני"),
+        posting("new", "אנליסט נתונים", "גוף שלישי"),
+    ]
+    # Three rows is too few for the frequency cutoff to leave any token to block on.
+    everything = resolve(rows, max_doc_frequency=1.0)
+    fresh_only = resolve(
+        rows, max_doc_frequency=1.0, is_fresh=lambda r: r["fingerprint"] == "new"
+    )
+
+    assert everything.compared == 3
+    assert {(p.left, p.right) for p in fresh_only.pairs} == {("old1", "new"), ("old2", "new")}
+
+
+def test_the_store_remembers_what_was_compared_and_with_which_body(ctx) -> None:
+    from desk.store import Posting
+
+    ctx.store.upsert_posting(
+        Posting(site="alljobs", external_id="1", title="אנליסט", company="א", body="abc"),
+        now="2026-11-01T09:00:00",
+    )
+    row = ctx.store.all_postings()[0]
+    assert ctx.store.resolved_bodies() == {}
+
+    ctx.store.mark_resolved([row], now="t")
+
+    assert ctx.store.resolved_bodies() == {row["id"]: 3}

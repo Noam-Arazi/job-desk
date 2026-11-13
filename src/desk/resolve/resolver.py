@@ -114,6 +114,7 @@ def candidate_pairs(
     postings: list[Mapping[str, Any]],
     *,
     max_doc_frequency: float = MAX_DOC_FREQUENCY,
+    fresh: set[int] | None = None,
 ) -> set[tuple[int, int]]:
     """Index positions of pairs worth scoring, by shared informative token.
 
@@ -138,10 +139,16 @@ def candidate_pairs(
             if frequency[token] <= ceiling:
                 index.setdefault(token, []).append(position)
 
+    # `fresh`: only pairs with at least one new member. Two postings that were
+    # both in yesterday's window were already compared yesterday. The token
+    # frequencies above are still taken over the whole window, so the blocking
+    # a new posting sees is the blocking a full pass would have given it.
     pairs: set[tuple[int, int]] = set()
     for positions in index.values():
         for i, left in enumerate(positions):
             for right in positions[i + 1 :]:
+                if fresh is not None and left not in fresh and right not in fresh:
+                    continue
                 pairs.add((left, right) if left < right else (right, left))
     return pairs
 
@@ -260,6 +267,7 @@ def resolve(
     *,
     judge: Judge | None = None,
     max_doc_frequency: float = MAX_DOC_FREQUENCY,
+    is_fresh: Callable[[Mapping[str, Any]], bool] | None = None,
 ) -> Resolution:
     """Score the plausible pairs, escalate only the uncertain ones, then cluster.
 
@@ -270,8 +278,10 @@ def resolve(
     rows = list(postings)
     pairs: list[PairScore] = []
     judged = 0
+    fresh = None if is_fresh is None else {i for i, r in enumerate(rows) if is_fresh(r)}
 
-    for left, right in sorted(candidate_pairs(rows, max_doc_frequency=max_doc_frequency)):
+    candidates = candidate_pairs(rows, max_doc_frequency=max_doc_frequency, fresh=fresh)
+    for left, right in sorted(candidates):
         scored = score_pair(rows[left], rows[right])
         if scored.band == UNCERTAIN and judge is not None:
             verdict = judge(rows[left], rows[right], scored)

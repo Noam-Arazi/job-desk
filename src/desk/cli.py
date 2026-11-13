@@ -209,7 +209,21 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     rows = [r for r in rows if not title_is_blocked(str(r.get("title", "")), spec)]
     print(f"skipped  {before - len(rows)} postings the title gate already blocks")
 
-    result = resolve_duplicates(rows, judge=judge)
+    # 13.11.2026 — a pair whose two postings were both compared before, with
+    # the bodies they have now, already has its verdict. The morning spent ~49
+    # minutes re-scoring the same window every day; `--all-pairs` still does.
+    is_fresh = None
+    if not args.all_pairs:
+        seen = store.resolved_bodies()
+        fresh_ids = {
+            int(r["id"])
+            for r in rows
+            if seen.get(int(r["id"])) != len(str(r.get("body") or ""))
+        }
+        print(f"fresh    {len(fresh_ids)} postings new or changed since the last pass")
+        is_fresh = lambda r: int(r["id"]) in fresh_ids  # noqa: E731
+
+    result = resolve_duplicates(rows, judge=judge, is_fresh=is_fresh)
     summary = result.summary()
     by_fp = {r["fingerprint"]: r for r in rows}
 
@@ -251,6 +265,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     store.record_links(
         ((p.left, p.right, p.score, p.band, p.method) for p in result.pairs), now=now
     )
+    store.mark_resolved(rows, now=now)
     merged = len(store.links(DUPLICATE))
     store.close()
     print("")
@@ -697,6 +712,11 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_cmd.add_argument("--budget", type=float, default=None, help="usd ceiling for --judge")
     resolve_cmd.add_argument(
         "--since-days", type=int, default=None, help="only postings dated in the last N days"
+    )
+    resolve_cmd.add_argument(
+        "--all-pairs",
+        action="store_true",
+        help="compare every pair again, not only pairs with a new or changed posting",
     )
     resolve_cmd.add_argument("--show", type=int, default=10, help="clusters to print")
     resolve_cmd.add_argument("--uncertain", action="store_true", help="list the uncertain pairs")
